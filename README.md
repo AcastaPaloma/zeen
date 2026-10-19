@@ -17,7 +17,11 @@ To get them, run this from the repo root (needs the [GitHub CLI](https://cli.git
 
 ```sh
 gh release download design-assets --repo AcastaPaloma/zeen --dir .
+mv Cut.and.Fold.svg "Cut and Fold.svg"
+mv Zeen.brainstorm.png "Zeen brainstorm.png"
 ```
+
+GitHub replaces spaces in release file names with dots, so the `mv` lines restore the original names.
 
 Or download them from the release page in a browser and put them in the repo root. They're already in `.gitignore`.
 
