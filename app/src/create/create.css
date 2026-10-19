@@ -39,37 +39,21 @@
 .bottom-stack {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 0 12px calc(var(--safe-bottom) + 12px);
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: column; gap: calc(6.2 * var(--u));
   z-index: 15;
   pointer-events: none;
 }
 .bottom-stack > * { pointer-events: auto; }
 .bottom-stack .hint-text { pointer-events: none; margin-bottom: 4px; animation: fade-up var(--t-med) var(--ease-out) both; }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  height: 66px;
-  background: var(--panel);
-  border-radius: 13px;
-  box-shadow: var(--shadow-1);
-  padding: 0 6px;
-  overflow: hidden;
-}
-.tb-sep { width: 1px; align-self: stretch; margin: 10px 2px; background: #EFEFEF; flex: none; }
-.tb-grip { width: 6px; height: 14px; margin-left: auto; margin-right: 4px; background-image: radial-gradient(circle, #C8C8C8 1px, transparent 1.3px); background-size: 3px 4px; flex: none; }
-.tool-glyph { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 13px; color: var(--ink); flex: none; transition: transform var(--t-fast) var(--ease-spring), background var(--t-fast); }
-.tool-glyph:active { transform: scale(0.88); }
-.tool-glyph.on { background: #FFF2F0; }
-.tool-glyph.on.fold { background: #F0F0FF; }
-.tool-img { height: 66px; padding: 0 10px; display: flex; align-items: flex-end; flex: none; transition: transform var(--t-med) var(--ease-spring); }
-.tool-img .tool-pic { display: block; width: auto; margin-bottom: -4px; transform-origin: bottom; }
-.toolbar:has(.tool-img) { overflow: visible; clip-path: inset(-90px -4px 0 -4px round 0 0 16px 16px); }
-.tool-img:active { transform: translateY(4px) scale(0.95); }
-/* Cut & Fold: the tools sit in the middle of the tray; the grip pins to the right edge */
-.cutfold .toolbar { position: relative; justify-content: center; gap: 4px; padding: 0 28px; }
-.cutfold .toolbar .tb-grip { position: absolute; right: 10px; top: 50%; margin: -7px 0 0; }
-.cutfold .tool-img { padding: 0 14px; }
+/* Bottom toolbars (Trays.tsx) are SVGs in the Figma export's units; --u (index.css) scales them. */
+.tray { display: block; flex: none; align-self: center; height: auto; overflow: visible; }
+.tray-cell { cursor: pointer; outline: none; }
+.tray-cell .tray-glyph { transform-box: fill-box; transform-origin: center; transition: transform var(--t-fast) var(--ease-spring); }
+.tray-cell:active .tray-glyph { transform: scale(0.88); }
+.tray-cell:focus-visible > rect { stroke: rgba(0, 0, 0, 0.2); stroke-width: 1; }
+.tray-art { transition: transform var(--t-med) var(--ease-spring); }
+.tray-art.lifted { transform: translateY(-9px); }
 
 /* cut/fold overlays */
 .cancel-chip {
@@ -250,16 +234,6 @@ textarea.text-input { height: auto; min-height: 88px; padding: 12px 14px; resize
 .ps-n { font-size: 9px; color: var(--mute); margin-top: 2px; }
 .ps-ph { width: 32px; height: 44px; background: #E9E9E9; display: block; }
 
-.collage-bar { padding: 0 4px; }
-.ink-tray { display: flex; align-items: flex-end; height: 66px; flex: none; }
-.ink-tool { width: 40px; height: 66px; display: flex; align-items: flex-end; justify-content: center; overflow: visible; transition: transform var(--t-med) var(--ease-spring); }
-.ink-tool .tool-pic { display: block; width: auto; max-width: 38px; object-fit: contain; object-position: bottom; transition: transform var(--t-med) var(--ease-spring); }
-.ink-tool.on .tool-pic { transform: translateY(-16px); }
-.ink-tool:active .tool-pic { transform: translateY(-6px); }
-.collage-bar { overflow: visible; clip-path: inset(-90px -4px 0 -4px round 0 0 16px 16px); }
-.ink-swatch { width: 44px; height: 44px; display: grid; place-items: center; flex: none; }
-.ink-swatch span { width: 30px; height: 30px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 1px rgba(0,0,0,.1), 0 0 0 3px #fff, 0 0 0 4px #E5E5E5; }
-.ink-preview { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0; font-size: 9px; color: var(--mute); min-width: 0; }
 .ink-colors { gap: 10px; padding: 6px 10px; background: var(--panel); border-radius: 13px; box-shadow: var(--shadow-1); animation: fade-up var(--t-fast) var(--ease-out) both; }
 .ink-colors .sw { flex: none; width: 30px; height: 30px; }
 

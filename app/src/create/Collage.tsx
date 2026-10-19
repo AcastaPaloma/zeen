@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { loadImage, TOOLS, trackById } from '../lib/assets'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { loadImage, trackById } from '../lib/assets'
 import { haptic, sfx } from '../lib/feedback'
 import { uid } from '../lib/geom'
 import { music } from '../lib/music'
@@ -20,15 +20,12 @@ import { MusicPicker } from './MusicPicker'
 import { ScrapSheet } from './ScrapSheet'
 import { SpreadView } from './SpreadView'
 import { TextEditor } from './TextEditor'
+import { CollageTray } from './Trays'
 
 type SheetName = 'none' | 'scrap' | 'effects' | 'layers' | 'music' | 'bg' | 'more' | 'ink' | 'history'
 
-/** h: drawn height; sink: how far the tool drops below the tray edge */
-const INK_TOOLS: { id: InkTool; src: string; label: string; h: number; sink: number }[] = [
-  { id: 'pencil', src: TOOLS.pencil, label: 'Pencil', h: 90, sink: 26 },
-  { id: 'pen', src: TOOLS.pen, label: 'Pen', h: 90, sink: 26 },
-  { id: 'marker', src: TOOLS.marker, label: 'Marker', h: 91, sink: 26 },
-  { id: 'eraser', src: TOOLS.eraser, label: 'Eraser', h: 39, sink: 2 },
+const INK_TOOLS: { id: InkTool; label: string }[] = [
+  { id: 'pencil', label: 'Pencil' }, { id: 'pen', label: 'Pen' }, { id: 'marker', label: 'Marker' }, { id: 'eraser', label: 'Eraser' },
 ]
 const INK_COLORS = ['#1A1A1A', '#FFFFFF', '#FF4934', '#F8D647', '#DEFF7C', '#4BA334', '#245AE2', '#5C5CE3', '#F158A7', '#E8614A', '#8B5A2B']
 const BG_COLORS = ['#F6F6F6', '#EEEDE9', '#FFFFFF', '#1A1A1A', '#FFD5F4', '#C0F6FF', '#EBEFD7', '#F8D647', '#FF4934', '#245AE2', '#4BA334', '#5C5CE3']
@@ -575,35 +572,9 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
             <label className="sw spectrum" aria-label="Custom colour"><input type="color" value={ink.color} onChange={e => ed.setInk({ color: e.target.value })} /></label>
           </div>
         )}
-        <div className="toolbar collage-bar" role="toolbar" aria-label="Collage tools">
-          <div className="ink-tray">
-            {INK_TOOLS.map(t => {
-              const on = drawing && ink.tool === t.id
-              return (
-                <button key={t.id} className={`ink-tool ${on ? 'on' : ''}`} aria-label={t.label} aria-pressed={on} onClick={() => startDraw(t.id)}>
-                  <img className="tool-pic" src={t.src} alt="" draggable={false} style={{ height: t.h, marginBottom: -t.sink }} />
-                </button>
-              )
-            })}
-          </div>
-          <span className="tb-sep" />
-          {drawing ? (
-            <>
-              <button className="ink-swatch" aria-label="Ink colour" style={{ '--sw': ink.color } as CSSProperties} onClick={() => setColorOpen(o => !o)}><span /></button>
-              <button className="ink-preview" aria-label="Brush settings" onClick={() => setSheet('ink')}>
-                <svg viewBox="0 0 60 24" width={60} height={24}><path d="M4 16c10-10 18 6 28-2s16-6 24-8" fill="none" stroke={ink.tool === 'eraser' ? '#ccc' : ink.color} strokeWidth={Math.max(1.5, ink.size[ink.tool] * 14)} strokeLinecap="round" opacity={ink.tool === 'marker' ? 0.6 : ink.opacity} /></svg>
-                <span>{ink.boil ? 'boiling' : ink.tool}</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="tool-glyph" aria-label="Add scraps" onClick={() => setSheet('scrap')}><Icon name="image" size={23} /></button>
-              <button className="tool-glyph" aria-label="Layers" onClick={() => setSheet('layers')}><Icon name="layers" size={23} /></button>
-              <button className="tool-glyph" aria-label="Add text" onClick={() => { haptic('tap'); setText({ open: true, initial: null }) }}><Icon name="text" size={23} /></button>
-              <button className="tool-glyph" aria-label="More tools" onClick={() => setSheet('more')}><Icon name="grid" size={23} /></button>
-            </>
-          )}
-        </div>
+        <CollageTray drawing={drawing} tool={ink.tool} onTool={startDraw}
+          onMore={() => setSheet('more')} onLayers={() => setSheet('layers')} onText={() => { haptic('tap'); setText({ open: true, initial: null }) }}
+          color={ink.color} onColor={() => setColorOpen(o => !o)} onBrush={() => setSheet('ink')} brushLabel={ink.boil ? 'boiling' : ink.tool} />
       </div>
 
       {spread && scene && (
@@ -665,8 +636,8 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
 
       <Sheet open={sheet === 'more'} onClose={() => setSheet('none')} title="Collage" dim>
         <div className="more-grid">
-          <button onClick={() => setSheet('effects')}><Icon name="sparkle" size={22} /><span>Effects</span></button>
           <button onClick={() => setSheet('scrap')}><Icon name="image" size={22} /><span>Scraps</span></button>
+          <button onClick={() => setSheet('effects')}><Icon name="sparkle" size={22} /><span>Effects</span></button>
           <button onClick={() => setSheet('music')}><Icon name="music" size={22} /><span>Music</span></button>
           <button onClick={() => setSheet('bg')}><Icon name="palette" size={22} /><span>Background</span></button>
           <button onClick={() => { setSheet('none'); setSpread(true) }}><Icon name="spread" size={22} /><span>Spread</span></button>

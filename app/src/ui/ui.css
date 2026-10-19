@@ -162,19 +162,15 @@
 
 .ruler {
   position: relative;
-  height: 30px;
-  overflow: hidden;
+  padding: 8px 0;
   touch-action: none;
   cursor: ew-resize;
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
   transition: opacity var(--t-med);
 }
+.ruler svg { display: block; width: 100%; height: auto; overflow: visible; }
 .ruler.dimmed { opacity: 0.4; }
-.ruler-strip { position: absolute; left: 50%; top: 0; bottom: 0; width: 160%; transition: transform 60ms linear; }
-.ruler .tick { position: absolute; bottom: 8px; width: 1px; height: 10px; background: #8E8E8E; }
-.ruler .tick.kf { height: 15px; background: var(--ink); width: 1.5px; }
-.ruler-center { position: absolute; left: 50%; bottom: 4px; width: 2px; height: 24px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
+/* in the editors the ruler is 240 units wide, centred above the toolbar (Group 82.svg) */
+.bottom-stack .ruler { width: calc(240 * var(--u)); align-self: center; margin: -8px 0; }
 
 /* ---------------------------------------------------------------- sheets */
 

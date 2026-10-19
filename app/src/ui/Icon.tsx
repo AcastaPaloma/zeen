@@ -104,20 +104,3 @@ export function Icon({ name, size = 22, stroke = 1.8, style, className, fill }: 
     </svg>
   )
 }
-
-/** The cut style glyphs from the Figma toolbar (dashed path + arrow head). */
-export function CutGlyph({ kind, active }: { kind: 'straight' | 'smooth' | 'jagged' | 'round'; active?: boolean }) {
-  const col = active ? 'var(--accent)' : 'var(--ink)'
-  const d = {
-    straight: 'M5 20 19 6',
-    smooth: 'M5 20c4 0 4-5 6-8s2-6 7-6',
-    jagged: 'M5 19l3-2-1-3 4-1-1-3 4-1-1-3 4 0',
-    round: 'M5 19c1-2 3-2 3 0s3-1 2-3 3-2 3 0 2-3 1-4 3-2 3 0',
-  }[kind]
-  return (
-    <svg width={34} height={34} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d={d} stroke={col} strokeWidth={1.4} strokeDasharray="2.2 1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15.5 5.2 19 5l-.5 3.4" stroke={col} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}

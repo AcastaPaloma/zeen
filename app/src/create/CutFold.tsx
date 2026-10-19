@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { TOOLS } from '../lib/assets'
 import { haptic, sfx } from '../lib/feedback'
 import { clamp, closestOnSegment, dist, uid } from '../lib/geom'
 import { music } from '../lib/music'
@@ -8,20 +7,17 @@ import { useApp } from '../lib/store'
 import type { Crease, Vec2, ZineDoc } from '../lib/types'
 import { FEELS } from '../three/spring'
 import type { PointerInfo, ZineScene } from '../three/ZineScene'
-import { CutGlyph, Icon } from '../ui/Icon'
+import { Icon } from '../ui/Icon'
 import { CheckBtn, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Toggle, VSlider } from '../ui/kit'
 import type { StepProps } from './Create'
 import { useEditor } from './editor'
 import { KeyframeStrip } from './KeyframeStrip'
+import { CutTray, FoldTray, PickTray } from './Trays'
 import { Loupe } from './Loupe'
 import { addLeaf, applyCut, applyFold, cutPreview, deleteCrease, foldPreview, updateCrease } from './ops'
 
 type Tool = 'pick' | 'cut' | 'fold'
 type FoldSub = 'fold' | 'page'
-
-const CUT_STYLES: { id: CutStyle; label: string }[] = [
-  { id: 'straight', label: 'Straight' }, { id: 'smooth', label: 'Smooth curve' }, { id: 'jagged', label: 'Jagged' }, { id: 'round', label: 'Round' },
-]
 
 interface Drag {
   kind: 'cut' | 'fold' | 'page' | 'endpoint'
@@ -579,43 +575,9 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         {kfCount > 1 && (
           <Ruler value={kfT} count={kfCount} onChange={t => { setKfT(t); scene?.setAngles(scene.poseAt(t), { animate: false }) }} onRelease={i => goKeyframe(i)} />
         )}
-        <div className="toolbar" role="toolbar" aria-label="Tools">
-          {tool === 'pick' && (
-            <>
-              <button className="tool-img" aria-label="Cut tool" onClick={() => pickTool('cut')}>
-                <img className="tool-pic" src={TOOLS.scissors} alt="" draggable={false} style={{ height: 80 }} />
-              </button>
-              <button className="tool-img" aria-label="Fold tool" onClick={() => pickTool('fold')}>
-                <img className="tool-pic" src={TOOLS.bonefolder} alt="" draggable={false} style={{ height: 78 }} />
-              </button>
-            </>
-          )}
-          {tool === 'cut' && CUT_STYLES.map(s => (
-            <button key={s.id} className={`tool-glyph ${cut.style === s.id ? 'on' : ''}`} aria-label={s.label} aria-pressed={cut.style === s.id}
-              onClick={() => { haptic('tick'); ed.setCut({ style: s.id }) }}>
-              <CutGlyph kind={s.id} active={cut.style === s.id} />
-            </button>
-          ))}
-          {tool === 'fold' && (
-            <>
-              <button className={`tool-glyph ${sub === 'fold' ? 'on fold' : ''}`} aria-label="Fold" onClick={() => { haptic('tick'); setSub('fold') }}>
-                <svg width={34} height={34} viewBox="0 0 24 24" fill="none" stroke={sub === 'fold' ? 'var(--fold)' : 'var(--ink)'} strokeWidth={1.4} strokeLinecap="round"><path d="M5 19 18 6M14 5.5l4.2.3.3 4.2" /></svg>
-              </button>
-              <button className={`tool-glyph ${sub === 'page' ? 'on fold' : ''}`} aria-label="Add page along a crease" onClick={() => { haptic('tick'); setSub('page') }}>
-                <svg width={34} height={34} viewBox="0 0 24 24" fill="none" stroke={sub === 'page' ? 'var(--fold)' : 'var(--ink)'} strokeWidth={1.4} strokeLinecap="round"><path d="M4 20 16 8M8 20 20 8M13 6.5l3.8.2.2 3.8M17 6.5l3.8.2.2 3.8" /></svg>
-              </button>
-            </>
-          )}
-          <span className="tb-sep" />
-          {tool === 'fold' && (
-            <>
-              <button className="tool-glyph" aria-label="Add keyframe" onClick={addKeyframe}><Icon name="pages" size={24} /></button>
-              <span className="tb-sep" />
-            </>
-          )}
-          <button className="tool-glyph" aria-label="More tools" onClick={() => setMore(true)}><Icon name="grid" size={24} /></button>
-          <span className="tb-grip" aria-hidden />
-        </div>
+        {tool === 'pick' && <PickTray onCut={() => pickTool('cut')} onFold={() => pickTool('fold')} onMore={() => setMore(true)} />}
+        {tool === 'cut' && <CutTray value={cut.style} onChange={st => { haptic('tick'); ed.setCut({ style: st }) }} onMore={() => setMore(true)} />}
+        {tool === 'fold' && <FoldTray sub={sub} onSub={v => { haptic('tick'); setSub(v) }} onKeyframe={addKeyframe} onMore={() => setMore(true)} />}
       </div>
 
       <Sheet open={more} onClose={() => setMore(false)} title="Paper tools" dim height="tall">

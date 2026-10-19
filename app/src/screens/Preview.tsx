@@ -91,13 +91,11 @@ export function AlbumPopup({ trackId, open, onClose }: { trackId?: string; open:
     <div className={`album-pop ${open ? 'on' : ''}`} onClick={onClose} role="dialog" aria-modal aria-hidden={!open} aria-label={`${t.album.title} by ${t.album.artist}`}>
       <div className="ap-dither" aria-hidden />
       <div className="ap-card" onClick={e => e.stopPropagation()}>
-        <img className="ap-cover" src={t.album.cover} alt={`${t.album.title} cover`} draggable={false} />
-        <div className="ap-row">
-          <span className="ap-meta"><b>{t.track.title}</b><small>{t.album.artist} · {t.album.title}</small></span>
-          <button className="ap-play" onClick={() => { haptic('tick'); music.toggle(trackId) }} aria-label={playing ? 'Pause' : 'Play'}>
-            <Icon name={playing ? 'pause' : 'play'} size={16} stroke={2.6} />
-          </button>
-        </div>
+        {/* tapping the cover plays or pauses */}
+        <img className="ap-cover" src={t.album.cover} alt={`${t.album.title} cover`} draggable={false}
+          role="button" aria-label={playing ? `Pause ${t.track.title}` : `Play ${t.track.title}`}
+          onClick={() => { haptic('tick'); music.toggle(trackId) }} />
+        <div className="ap-meta"><b>{t.track.title}</b><small>{t.album.artist}</small></div>
       </div>
     </div>
   )

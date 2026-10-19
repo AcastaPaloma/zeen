@@ -117,6 +117,14 @@ export function VSlider({ value, onChange, label, variant = 'zoom', onEnd }: {
 }
 
 /** Horizontal tick ruler that scrubs between keyframes. Notches snap with a tick. */
+// Ruler drawn from the Figma export "Group 82.svg": 240 x 15 units, a tick every 4.499 units,
+// keyframes as darker ticks, and a fixed playhead in the middle the ticks scroll under.
+const R_TICK = 4.49899
+const R_ORIGIN = 0.488525 // first tick at rest
+const R_ZERO = 27 // the tick the playhead sits on at rest (the playhead replaces it)
+const R_KF_GAP = 8 // ticks between keyframes
+const R_HEAD = 121.665
+
 export function Ruler({ value, count, onChange, onRelease, dimmed }: {
   value: number; count: number; onChange: (v: number) => void; onRelease?: (v: number) => void; dimmed?: boolean
 }) {
@@ -127,8 +135,9 @@ export function Ruler({ value, count, onChange, onRelease, dimmed }: {
   const toV = (clientX: number) => {
     const r = ref.current!.getBoundingClientRect()
     const d = drag.current!
-    // scrub: dragging left advances (content moves under the centre line)
-    return clamp(d.v - ((clientX - d.x) / r.width) * span * 1.6, 0, span)
+    // the ticks follow the finger: dragging left moves later keyframes under the playhead
+    const units = ((clientX - d.x) / r.width) * 240
+    return clamp(d.v - units / (R_KF_GAP * R_TICK), 0, span)
   }
   const apply = (v: number) => {
     const near = Math.round(v)
@@ -136,8 +145,15 @@ export function Ruler({ value, count, onChange, onRelease, dimmed }: {
     if (Math.round(snapped) !== last.current && Math.abs(snapped - Math.round(snapped)) < 0.001) { haptic('tick'); last.current = Math.round(snapped) }
     onChange(snapped)
   }
-  const ticks = 60
-  const offset = (value / span) * 100
+  const shift = value * R_KF_GAP * R_TICK
+  const ticks: { x: number; kf: boolean }[] = []
+  for (let j = Math.ceil(shift / R_TICK - 1e-6); ; j++) {
+    const x = R_ORIGIN + j * R_TICK - shift
+    if (x > 239.2) break
+    if (Math.abs(x - R_HEAD) < 0.6) continue // under the playhead
+    const k = j - R_ZERO
+    ticks.push({ x, kf: k >= 0 && k % R_KF_GAP === 0 && k / R_KF_GAP <= span })
+  }
   return (
     <div className={`ruler ${dimmed ? 'dimmed' : ''}`} ref={ref} role="slider" aria-label="Unfold sequence" aria-valuemin={0} aria-valuemax={span} aria-valuenow={value} tabIndex={0}
       onKeyDown={e => {
@@ -154,14 +170,12 @@ export function Ruler({ value, count, onChange, onRelease, dimmed }: {
         onChange(v); onRelease?.(v)
       }}
       onPointerCancel={() => { drag.current = null }}>
-      <div className="ruler-strip" style={{ transform: `translateX(${-offset}%)` }}>
-        {Array.from({ length: ticks + 1 }, (_, i) => {
-          const kfPos = (i / ticks) * span
-          const isKf = Math.abs(kfPos - Math.round(kfPos)) < span / ticks / 2
-          return <span key={i} className={`tick ${isKf ? 'kf' : ''}`} style={{ left: `${(i / ticks) * 100}%` }} />
-        })}
-      </div>
-      <span className="ruler-center" />
+      <svg viewBox="0 0 240 15" fill="none" aria-hidden>
+        {ticks.map(t => (
+          <path key={t.x.toFixed(2)} d={`M${t.x.toFixed(4)} 8.30615L${t.x.toFixed(4)} 14.1695`} stroke="black" strokeOpacity={t.kf ? 0.4 : 0.2} strokeWidth="0.977228" strokeLinecap="round" />
+        ))}
+        <path d={`M${R_HEAD} 0.48877L${R_HEAD} 14.17`} stroke="black" strokeOpacity="0.5" strokeWidth="0.977228" strokeLinecap="round" />
+      </svg>
     </div>
   )
 }
