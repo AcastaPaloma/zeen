@@ -5,6 +5,7 @@ export const STICKERS = [
 ].map(n => ({ id: 'st-' + n, src: `${A}/stickers/${n}.webp`, name: n.replace(/-/g, ' ') }))
 
 export const SCRAPS = [
+  ['hiss-cat', 'Hissy Cat', 'not in the mood'],
   ['bird-blue', 'Cool Bird Alert', 'bird i found on pinterest'],
   ['bird-yellow', 'Skater Budgie', 'kickflip king'],
   ['chick', 'Lil Chick', 'smallest skater in the park'],
