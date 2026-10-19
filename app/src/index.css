@@ -1,0 +1,155 @@
+:root {
+  --accent: #FF4934;
+  --accent-press: #E83A26;
+  --fold: #5C5CE3;
+  --lime: #DEFF7C;
+  --canvas: #F6F6F6;
+  --dot: #D2D6DB;
+  --ink: #1A1A1A;
+  --ink-2: #323232;
+  --mute: #7B7B7B;
+  --mute-2: #B9B9B9;
+  --line: #EAEAEA;
+  --panel: #FFFFFF;
+  --chip: #F2F2F2;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --r-pill: 14px;
+  --r-sheet: 20px;
+  --ui: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 180ms;
+  --t-med: 280ms;
+  --t-slow: 420ms;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  font-family: var(--ui);
+  color: var(--ink);
+  background: #E9E8E4;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  overflow: hidden;
+  font-size: 15px;
+}
+
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; touch-action: manipulation; }
+input, textarea { font: inherit; color: inherit; }
+img { -webkit-user-drag: none; user-select: none; }
+
+/* ---------------------------------------------------------------- phone frame */
+
+.device {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--canvas);
+  overflow: hidden;
+  isolation: isolate;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.device input, .device textarea, .device [contenteditable] { -webkit-user-select: text; user-select: text; }
+
+@media (min-width: 600px) {
+  body { display: grid; place-items: center; background: radial-gradient(circle at 30% 20%, #F3F1EC, #DCDAD4); }
+  #root { display: grid; place-items: center; height: 100%; width: 100%; }
+  .device {
+    width: 402px;
+    height: min(874px, calc(100vh - 40px));
+    border-radius: 48px;
+    box-shadow: 0 0 0 10px #111, 0 0 0 11px #333, 0 40px 80px rgba(0, 0, 0, 0.25);
+  }
+  .device::before {
+    content: '';
+    position: absolute;
+    top: 11px; left: 50%;
+    width: 122px; height: 34px;
+    transform: translateX(-50%);
+    background: #000;
+    border-radius: 20px;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .device { --safe-top: 50px; --safe-bottom: 16px; }
+}
+
+.dots {
+  background-color: var(--bg, var(--canvas));
+  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.3px);
+  background-size: 17px 17px;
+  background-position: calc(50% + var(--px, 0px)) calc(50% + var(--py, 0px));
+}
+
+/* ---------------------------------------------------------------- 3D scene */
+
+.zscene { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+.zscene-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.zscene.shadowed .zscene-canvas { filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.14)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.08)); }
+.zscene-overlay { position: absolute; inset: 0; pointer-events: none; }
+
+.fold-handle {
+  position: absolute;
+  left: 0; top: 0;
+  width: 44px; height: 44px;
+  margin: -22px 0 0 -22px;
+  pointer-events: auto;
+  touch-action: none;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  transition: opacity var(--t-fast) ease;
+  z-index: 3;
+}
+.fold-handle.hidden { opacity: 0; pointer-events: none; }
+.fold-handle .fh-core {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9), 0 0 10px 4px rgba(255, 255, 255, 0.95), 0 0 22px 10px rgba(255, 73, 52, 0.28), 0 1px 3px rgba(0, 0, 0, 0.35);
+  animation: fh-pulse 2s ease-in-out infinite;
+  transition: transform var(--t-fast) var(--ease-spring);
+}
+.fold-handle.active .fh-core { transform: scale(1.35); animation: none; box-shadow: 0 0 0 2px #fff, 0 0 14px 7px #fff, 0 0 30px 14px rgba(255, 73, 52, 0.4); }
+.fold-handle .fh-label {
+  position: absolute; top: -6px; right: -2px;
+  font-size: 10px; font-weight: 600; color: var(--ink);
+  background: #fff; border-radius: 8px; padding: 0 4px; line-height: 14px;
+  opacity: 0; transform: scale(0.7);
+  transition: opacity var(--t-fast), transform var(--t-fast) var(--ease-spring);
+  box-shadow: var(--shadow-1);
+}
+.fold-handle.crowded .fh-label { opacity: 1; transform: none; }
+.fold-handle.hint::after {
+  content: '';
+  position: absolute;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.95), rgba(255,255,255,0.5) 60%, transparent 70%);
+  border: 1.5px solid rgba(0,0,0,0.12);
+  animation: ghost-finger 2.2s var(--ease-out) infinite;
+  pointer-events: none;
+}
+@keyframes fh-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.12); filter: brightness(1.15); }
+}
+@keyframes ghost-finger {
+  0% { transform: translate(14px, 22px) scale(1.1); opacity: 0; }
+  20% { transform: translate(0, 0) scale(1); opacity: 1; }
+  70% { transform: translate(-46px, 6px) scale(1); opacity: 1; }
+  100% { transform: translate(-46px, 6px) scale(0.9); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold-handle .fh-core, .fold-handle.hint::after { animation: none; }
+}
