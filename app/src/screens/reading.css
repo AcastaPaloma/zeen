@@ -12,6 +12,8 @@
 /* everything else behind the preview (new makers on the feed, a profile's header, stats, tabs, drafts and
    shelves, a community's content) blurs, dithers and fades the same way; zine grids go card by card above */
 .device > .layer.under:has(~ .layer.top .screen.preview) :is(.pf-scroll, .soc-scroll, .home-feed) > :not(.messy-grid) { filter: blur(7px) url(#zeen-dither); opacity: 0.45; }
+/* a zine opened from the reader (its end card's "More from" row): the reader's zine, controls and card go too */
+.device > .layer.under:has(~ .layer.top .screen.preview) > .screen.read > * { filter: blur(7px) url(#zeen-dither); opacity: 0.45; }
 /* closing: the zine flies back onto its card (Preview close) while the rest of the preview fades and the
    feed's covers sharpen back up */
 .device > .layer.leaving.leave-lift { animation: none; }
@@ -21,6 +23,7 @@
 .device > .layer.top:has(~ .layer.leaving .screen.preview) :is(.zcard-tag, .zcard-badge) { animation: tag-undither 480ms ease both; }
 .device > .layer.top:has(~ .layer.leaving .screen.preview) .home-head { animation: fade-in 360ms ease both; }
 .device > .layer.top:has(~ .layer.leaving .screen.preview) :is(.pf-scroll, .soc-scroll, .home-feed) > :not(.messy-grid) { animation: card-undither 480ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) > .screen.read > * { animation: card-undither 480ms cubic-bezier(0.32, 0.72, 0, 1) both; }
 @keyframes feed-brighten { from { filter: brightness(0.96); } to { filter: brightness(1); } }
 @keyframes card-undither { from { filter: blur(7px); opacity: 0.45; } to { filter: blur(0px); opacity: 1; } }
 @keyframes tag-undither { from { filter: blur(2px); opacity: 0.3; } to { filter: blur(0px); opacity: 1; } }

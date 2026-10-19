@@ -91,9 +91,13 @@ export function BottomNav({ current, search = true, shown = true }: { current: '
         </button>
       </div>
       <NavTabs current={current} onTab={t => {
+        // any tab folds the search sheet back down first
+        if (useApp.getState().searchOpen) setSearchOpen(false)
         if (t === 'create') { haptic('tap'); tab('create'); return }
         haptic('tick')
-        if (t !== current) tab(t)
+        // always act, even on the highlighted tab: Home brings you back to Discover from a community or
+        // anything else on top, Profile back to your own profile
+        tab(t)
       }} />
     </nav>
   )

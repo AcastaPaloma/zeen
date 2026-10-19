@@ -180,7 +180,7 @@ export const useApp = create<AppState>((setS, getS) => ({
   tab(name) {
     setS(s => {
       // both tabs are pages of home: switching them only moves home's pager (and closes whatever is on top)
-      if (name === 'home') return { stack: [{ name: 'home' }], dir: -1, homePage: s.homePage === 'profile' ? s.homeFeed : s.homePage }
+      if (name === 'home') return { stack: [{ name: 'home' }], dir: -1, homePage: 'discover', homeFeed: 'discover' }
       if (name === 'profile') return { stack: [{ name: 'home' }], dir: -1, homePage: 'profile' }
       return { stack: [...s.stack, { name: 'create' }], dir: 1 }
     })
