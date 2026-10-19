@@ -1,7 +1,7 @@
-import { layoutText, pxPerCm } from '../lib/compose'
+import { drawStroke, drawText, layoutText, processedScrap, pxPerCm } from '../lib/compose'
 import { bbox } from '../lib/geom'
 import { flatToPage, pageToFlat } from '../lib/paper'
-import type { InkObj, Side, Vec2, ZineDoc, ZObject } from '../lib/types'
+import type { Effect, InkObj, Side, Vec2, ZineDoc, ZObject } from '../lib/types'
 import type { ZineScene } from '../three/ZineScene'
 
 export interface Box { cx: number; cy: number; w: number; h: number; rot: number; scale: number }
@@ -43,11 +43,11 @@ export function hitObject(o: ZObject, p: Vec2, pad = 0.25) {
   return Math.abs(lx) <= b.w / 2 + pad && Math.abs(ly) <= b.h / 2 + pad
 }
 
-/** Topmost visible, unlocked object under a page point. */
-export function objectAt(doc: ZineDoc, surface: string, side: Side, p: Vec2) {
+/** Topmost visible object under a page point. Locked objects are skipped unless `includeLocked` (readers can still grab them). */
+export function objectAt(doc: ZineDoc, surface: string, side: Side, p: Vec2, includeLocked = false) {
   for (let i = doc.objects.length - 1; i >= 0; i--) {
     const o = doc.objects[i]
-    if (o.surface !== surface || o.side !== side || o.hidden || o.locked) continue
+    if (o.surface !== surface || o.side !== side || o.hidden || (o.locked && !includeLocked)) continue
     if (o.kind === 'ink') {
       // ink is only grabbable near its strokes
       const near = o.strokes.some(s => {
@@ -152,4 +152,40 @@ function inRing(p: Vec2, r: Vec2[]) {
     if ((r[i][1] > p[1]) !== (r[j][1] > p[1]) && p[0] < ((r[j][0] - r[i][0]) * (p[1] - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) inside = !inside
   }
   return inside
+}
+
+/**
+ * One object on its own, as an image with a transparent background (for saving it as a scrap).
+ * Scraps keep their cut-out, effects and die-cut border; GIFs keep their original file so they still move.
+ */
+export function objectImage(o: ZObject, effects: Effect[] = []): string | null {
+  if (o.kind === 'scrap') {
+    if (o.gif) return o.src
+    const p = processedScrap(o, effects)
+    if (!p) return o.src
+    if (!o.flipX) return p.canvas.toDataURL('image/webp', 0.92)
+    const c = document.createElement('canvas')
+    c.width = p.canvas.width; c.height = p.canvas.height
+    const ctx = c.getContext('2d')!
+    ctx.translate(c.width, 0); ctx.scale(-1, 1)
+    ctx.drawImage(p.canvas, 0, 0)
+    return c.toDataURL('image/webp', 0.92)
+  }
+  // text and ink are drawn in cm; render them at up to 60 px/cm, capped at 1200 px
+  let w: number, h: number, x0 = 0, y0 = 0
+  if (o.kind === 'text') { const L = layoutText(o); w = L.w; h = L.h }
+  else { const b = inkBounds(o); x0 = b.x0; y0 = b.y0; w = b.x1 - b.x0; h = b.y1 - b.y0 }
+  if (w <= 0 || h <= 0) return null
+  const k = Math.min(60, 1200 / Math.max(w, h))
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.ceil(w * k)); c.height = Math.max(1, Math.ceil(h * k))
+  const ctx = c.getContext('2d')!
+  if (o.kind === 'text') {
+    ctx.scale(k, k)
+    drawText(ctx, { ...o, x: w / 2, y: h / 2, rot: 0, scale: 1 })
+  } else {
+    ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k)
+    for (const st of o.strokes) drawStroke(ctx, st, { time: 0, animate: false })
+  }
+  return c.toDataURL('image/webp', 0.92)
 }

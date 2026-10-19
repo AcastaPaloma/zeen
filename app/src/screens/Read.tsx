@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { STICKERS } from '../lib/assets'
+import { boxCorners, objectAt, objectBox, objectImage } from '../create/collageUtil'
 import { haptic, isMuted, setMuted, sfx } from '../lib/feedback'
 import { music } from '../lib/music'
+import { flatToPage } from '../lib/paper'
+import { ME } from '../lib/samples'
 import { published, useApp } from '../lib/store'
 import { renderThumb, useThumb } from '../lib/thumbs'
-import type { ZineDoc } from '../lib/types'
+import type { ScrapItem, ZineDoc, ZObject } from '../lib/types'
 import { FEELS } from '../three/spring'
 import type { ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
@@ -13,12 +15,8 @@ import { ZineView } from '../ui/ZineView'
 import { copyLink, HeartSticker, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicTile, AlbumPopup, type Box } from './Preview'
 import './reading.css'
 
-interface ReaderSticker { src: string; fx: number; fy: number; rot: number }
-
-const stickerKey = (id: string) => `zeen.readerStickers.${id}`
-function loadStickers(id: string): ReaderSticker[] {
-  try { return JSON.parse(localStorage.getItem(stickerKey(id)) ?? '[]') } catch { return [] }
-}
+/** Scrapbook id for an object saved out of a zine, so saving it twice doesn't duplicate it. */
+const savedScrapId = (zine: string, obj: string) => `u_${zine}_${obj}`
 
 /** Small keyframe thumbnail: the zine rendered at that pose. */
 function KfThumb({ doc, i, on, onClick }: { doc: ZineDoc; i: number; on: boolean; onClick: () => void }) {
@@ -56,9 +54,8 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const [slap, setSlap] = useState(0)
   const [mutedS, setMutedS] = useState(isMuted())
   const [endOpen, setEndOpen] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number; fx: number; fy: number } | null>(null)
-  const [stickerPick, setStickerPick] = useState<{ fx: number; fy: number } | null>(null)
-  const [stickers, setStickers] = useState<ReaderSticker[]>(() => loadStickers(id))
+  /** long-press menu; `obj` is the scrap, text or drawing under the finger, if any */
+  const [menu, setMenu] = useState<{ x: number; y: number; obj: ZObject | null } | null>(null)
   const [showHint, setShowHint] = useState(!seenHint)
   const [album, setAlbum] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
@@ -175,7 +172,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
   useEffect(() => { if (scene) scene.handlers.doubleTap = p => { if (!scene.pick(p.x, p.y)) return false; if (!liked) like(); else { setSlap(Date.now()); sfx('slap') } return true } })
 
-  // long-press on the paper: Copy / Add sticker / Save / Share
+  // long-press on the paper: Copy / Save to scrapbook (the thing under the finger) / Save / Share
   const onPointerDown = (e: React.PointerEvent) => {
     if (!scene || (e.target as HTMLElement).closest('.fold-handle')) return
     const r = stage.current!.getBoundingClientRect()
@@ -185,11 +182,13 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       x: e.clientX, y: e.clientY,
       timer: window.setTimeout(() => {
         press.current = null
-        if (!scene.pick(x, y) || !box) return
+        const hit = scene.pick(x, y)
+        if (!hit || !doc) return
         haptic('firm')
-        const w = box.x1 - box.x0, h = box.y1 - box.y0
+        const s = scene.d.surfaces.get(hit.surface)
+        const obj = s ? objectAt(doc, hit.surface, hit.side, flatToPage(s.frame, hit.side, hit.flat), true) : null
         const hr = root.current!.getBoundingClientRect()
-        setMenu({ x: e.clientX - hr.left, y: e.clientY - hr.top, fx: (x - box.x0) / w, fy: (y - box.y0) / h })
+        setMenu({ x: e.clientX - hr.left, y: e.clientY - hr.top, obj })
       }, 520),
     }
   }
@@ -198,14 +197,33 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   }
   const onPointerUp = () => { if (press.current) { clearTimeout(press.current.timer); press.current = null } }
 
-  const addSticker = (src: string) => {
-    if (!stickerPick) return
-    const next = [...stickers, { src, fx: stickerPick.fx, fy: stickerPick.fy, rot: (Math.random() - 0.5) * 0.6 }]
-    setStickers(next)
-    try { localStorage.setItem(stickerKey(id), JSON.stringify(next)) } catch { /* ignore */ }
-    setStickerPick(null)
-    sfx('slap'); haptic('double')
-    showToast('Stuck on — only you can see it')
+  /** Save the held object into the reader's scrapbook, then fly it toward the profile tab. */
+  const saveObject = (o: ZObject) => {
+    if (!doc || !scene) return
+    if (doc.author !== ME && !doc.publish.scrapReuse) { haptic('tick'); showToast('The maker keeps these scraps to themselves'); return }
+    const sid = savedScrapId(doc.id, o.id)
+    if (useApp.getState().scrapbook.some(x => x.id === sid)) { haptic('tick'); showToast('Already in your scrapbook'); return }
+    const src = objectImage(o, doc.effects)
+    if (!src) { showToast('Nothing to save there'); return }
+    const maker = useApp.getState().users.find(u => u.id === doc.author)
+    const name = o.kind === 'text' ? o.text.split('\n')[0].slice(0, 28) || 'Text' : o.name || (o.kind === 'ink' ? 'Drawing' : 'Scrap')
+    const item: ScrapItem = {
+      id: sid, src, name, note: `saved while reading “${doc.publish.title || 'Untitled'}”`,
+      collection: 'Saved from zines', addedAt: Date.now(), addedBy: ME,
+      from: `"${doc.publish.title || 'Untitled'}"${maker ? ` by ${maker.name}` : ''}`, where: 'Zeen',
+      edition: [1, 1], usedIn: [doc.id], gif: o.kind === 'scrap' && !!o.gif, kind: o.kind === 'scrap' && o.gif ? 'gif' : 'image',
+    }
+    useApp.getState().addScraps([item])
+    // fly the object itself from where it sits on the page
+    const b = objectBox(o)
+    const panel = scene.panelAt(o.surface, o.side, [b.cx, b.cy])
+    if (panel) {
+      const pts = boxCorners(b).map(p => scene.pageToScreen(panel, o.side, p))
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
+      flyToShelf(src, offsetBox({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, stage.current, root.current), root.current)
+    }
+    sfx('rustle'); haptic('tap')
+    setTimeout(() => showToast('Saved to your scrapbook', { label: 'View', run: () => go({ name: 'scrapbook' }) }), 380)
   }
 
   const more = useMemo(() => (doc ? published(zines).filter(z => z.author === doc.author && z.id !== doc.id).slice(0, 6) : []), [zines, doc])
@@ -231,10 +249,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       <div className="read-stage" ref={stage} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <ZineView doc={doc} mode="page" keepAngles={false} onScene={onScene} />
         {liked && <HeartSticker box={box} fresh={slap} />}
-        {box && stickers.map((s, i) => (
-          <img key={i} className="reader-sticker" src={s.src} alt="" draggable={false}
-            style={{ left: box.x0 + (box.x1 - box.x0) * s.fx, top: box.y0 + (box.y1 - box.y0) * s.fy, width: Math.max(30, (box.x1 - box.x0) * 0.18), transform: `translate(-50%,-50%) rotate(${s.rot}rad)` }} />
-        ))}
       </div>
 
       {showHint && !seenHint && (
@@ -266,7 +280,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
           <div className="lp-pos" style={{ left: Math.min(Math.max(menu.x, 140), (root.current?.clientWidth ?? 390) - 140), top: Math.max(menu.y - 64, 90) }}>
           <div className="lp-menu" role="menu">
             <button role="menuitem" onClick={() => { setMenu(null); copyLink(doc) }}>Copy</button>
-            <button role="menuitem" onClick={() => { setStickerPick({ fx: menu.fx, fy: menu.fy }); setMenu(null) }}>Add Sticker</button>
+            {menu.obj && <button role="menuitem" onClick={() => { const o = menu.obj!; setMenu(null); saveObject(o) }}>Save to scrapbook</button>}
             <button role="menuitem" onClick={() => { setMenu(null); if (!saved) save(); else showToast('Already on your shelf') }}>Save</button>
             <button role="menuitem" onClick={() => { setMenu(null); shareZine(doc) }}>Share...</button>
           </div>
@@ -275,11 +289,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       )}
 
       <AlbumPopup trackId={doc.music?.track} open={album} onClose={() => setAlbum(false)} />
-      <Sheet open={!!stickerPick} onClose={() => setStickerPick(null)} title="Stick something on it" dim>
-        <div className="sticker-pick">
-          {STICKERS.map(s => <button key={s.id} onClick={() => addSticker(s.src)} aria-label={s.name}><img src={s.src} alt="" /></button>)}
-        </div>
-      </Sheet>
 
       <Sheet open={endOpen} onClose={() => setEndOpen(false)} className="end-card">
         <div className="end-head">
