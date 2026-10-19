@@ -4,6 +4,7 @@ import { haptic } from '../lib/feedback'
 import { published, useApp } from '../lib/store'
 import { Icon } from '../ui/Icon'
 import { Button } from '../ui/kit'
+import { CommunityTitle } from '../ui/Ransom'
 import { openZine } from './Community'
 import { MessyGrid } from './ZineGrid'
 import './social.css'
@@ -37,7 +38,7 @@ export default function PromptScreen({ id }: { active: boolean; id?: string }) {
             {stickers.map((s, i) => <img key={s.id} src={s.src} alt="" style={{ right: i * 34, top: i * 52, transform: `rotate(${i ? -14 : 10}deg)`, animationDelay: `${120 + i * 90}ms` } as CSSProperties} />)}
           </div>
           <div className="pr-k">#{c.tag} · weekly prompt</div>
-          <h1 className="pr-title">{c.prompt.title}</h1>
+          <CommunityTitle c={c} text={c.prompt.title} className="pr-title" />
           <p className="pr-body">{c.prompt.body}</p>
           <div className="pr-meta">
             <span className="pr-due">due {c.prompt.due}</span>

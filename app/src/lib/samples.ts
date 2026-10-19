@@ -34,26 +34,26 @@ export const userById = (id: string) => USERS.find(u => u.id === id)
 
 export const COMMUNITIES: Community[] = [
   {
-    id: 'c_svsd', tag: 'SVSD', name: 'Silicon Valley Design', color: '#245AE2',
+    id: 'c_svsd', tag: 'SVSD', name: 'Silicon Valley Design', color: '#245AE2', font: 'marker',
     description: 'Sharing ideas, tips and memories from the Silicon Valley School of Design!! Welcoming all designers :)',
     members: 1200, perMonth: 87,
     prompt: { title: 'How to win', body: 'Make a zine about the best advice you ever got before a crit.', due: 'Sun' },
     rules: ['Be kind in crits', 'Credit your scraps', 'No spec work asks'], mods: ['u_raf', ME], created: 'Sep 2025',
   },
   {
-    id: 'c_mtl', tag: 'MTLZINE', name: 'Montreal Zine Fest', color: '#1A1A1A',
+    id: 'c_mtl', tag: 'MTLZINE', name: 'Montreal Zine Fest', color: '#1A1A1A', font: 'typewriter',
     description: 'Year-round home for the fest. Trade, swap, and post your table zines.', members: 3400, perMonth: 212,
     prompt: { title: 'Found in the city', body: 'Photocopy something you found on the street this week.', due: 'Fri' },
     rules: ['Swap fair', 'Tag your table number'], mods: ['u_julien'], created: 'Mar 2024',
   },
   {
-    id: 'c_small', tag: 'SMALLGUYS', name: 'Small Guys Club', color: '#F8D647',
+    id: 'c_small', tag: 'SMALLGUYS', name: 'Small Guys Club', color: '#F8D647', font: 'mono',
     description: 'Zines about small guys. Birds on skateboards. Hamsters with drums. You know.', members: 9800, perMonth: 640,
     prompt: { title: 'Tiny hero', body: 'Give a small guy a big adventure in 4 pages.', due: 'Wed' },
     rules: ['Small guys only', 'No big guys'], mods: ['u_ada'], created: 'Jan 2025',
   },
   {
-    id: 'c_riot', tag: 'RIOTGRRRL', name: 'Riot Grrrl Archive', color: '#FF4934',
+    id: 'c_riot', tag: 'RIOTGRRRL', name: 'Riot Grrrl Archive', color: '#FF4934', font: 'ransom',
     description: 'Scans, new work and history. Loud, messy, and ours.', members: 5100, perMonth: 133,
     prompt: { title: 'Her jazz', body: 'Answer a song with a zine.', due: 'Mon' },
     rules: ['Respect the archive', 'Content notes on heavy stuff'], mods: ['u_tove'], created: 'Jun 2023',

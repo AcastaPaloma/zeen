@@ -63,14 +63,11 @@ export function useZineMusic(doc: ZineDoc | undefined, active: boolean) {
 
 /** The zine's song as a small rounded-square cover. Tapping it opens the album. */
 export function MusicTile({ trackId, onOpen }: { trackId?: string; onOpen: () => void }) {
-  const st = useMusicState()
   const t = trackById(trackId)
   if (!t || !trackId) return null
-  const playing = st.playing && st.track === trackId
   return (
     <button className="music-tile" onClick={() => { haptic('tick'); onOpen() }} aria-label={`Soundtrack: ${t.track.title} by ${t.album.artist}`}>
       <img src={t.album.cover} alt="" draggable={false} />
-      {playing && <span className="mt-eq" aria-hidden><i /><i /><i /></span>}
     </button>
   )
 }
@@ -279,6 +276,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
   const [album, setAlbum] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const root = useRef<HTMLDivElement>(null)
+  const tapTimer = useRef(0)
   const box = useZineBox(scene)
   const thumb = useThumb(doc)
   useZineMusic(doc, active)
@@ -326,7 +324,22 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id])
 
-  useEffect(() => { if (scene) scene.handlers.doubleTap = () => { if (!useApp.getState().likes.includes(id)) like(); else { setSlap(Date.now()); sfx('slap') } return true } }, [scene, like, id])
+  // a tap on the zine opens it to read; wait out the double-tap window so double-tap still likes
+  const gatedNow = !!doc?.publish.contentNote && !noteOk
+  useEffect(() => {
+    if (!scene) return
+    scene.handlers.tap = p => {
+      if (gatedNow || !scene.pick(p.x, p.y)) return
+      clearTimeout(tapTimer.current)
+      tapTimer.current = window.setTimeout(() => { haptic('tap'); go({ name: 'read', id }) }, 320)
+    }
+    scene.handlers.doubleTap = () => {
+      clearTimeout(tapTimer.current)
+      if (!useApp.getState().likes.includes(id)) like(); else { setSlap(Date.now()); sfx('slap') }
+      return true
+    }
+  }, [scene, like, id, go, gatedNow])
+  useEffect(() => () => clearTimeout(tapTimer.current), [])
 
   if (!doc) {
     return <div className="screen dots"><div className="top-bar"><PillGroup className="solo"><IconBtn name="back" label="Back" onClick={back} /></PillGroup></div><p className="pt-empty" style={{ marginTop: 140 }}>This zine was folded away.</p></div>
@@ -370,7 +383,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
         </div>
       )}
 
-      <div className="pv-hint">swipe to turn it over · double-tap to like</div>
+      <div className="pv-hint">tap to read · swipe to turn it over · double-tap to like</div>
 
       <div className="pv-info">
         <div className="pv-maker">

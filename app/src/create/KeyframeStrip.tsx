@@ -66,7 +66,7 @@ export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, rea
         ))}
         {onAdd && (
           <button className="kfi kfi-add" onClick={onAdd} aria-label="Add keyframe from the current pose">
-            <Icon name="pages" size={20} />
+            <Icon name="nextPose" size={20} />
             <span>next pose</span>
           </button>
         )}

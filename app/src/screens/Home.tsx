@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { haptic } from '../lib/feedback'
 import { ME } from '../lib/samples'
 import { published, useApp } from '../lib/store'
@@ -41,10 +41,34 @@ export default function Home({ active }: { active: boolean }) {
 
   const newMakers = users.filter(u => u.id !== ME && !following.includes(u.id))
 
+  // depth of field: zines blur as they scroll out under the header and come into focus as they
+  // rise from behind the bottom bar
+  const focusCards = useCallback(() => {
+    const sc = scroller.current
+    if (!sc) return
+    const r = sc.getBoundingClientRect()
+    for (const el of sc.querySelectorAll<HTMLElement>('.zcard-wrap')) {
+      const b = el.getBoundingClientRect()
+      const c = (b.top + b.bottom) / 2
+      const top = (r.top + 150 - c) / 190 // 0 until the centre passes 150px from the top, 1 at -40px
+      const bottom = (c - (r.bottom - 230)) / 270 // 0 until 230px from the bottom, 1 at +40px
+      const k = Math.max(0, Math.min(1, Math.max(top, bottom)))
+      el.style.filter = k > 0.02 ? `blur(${(k * 7).toFixed(1)}px)` : ''
+      el.style.opacity = k > 0.02 ? (1 - k * 0.4).toFixed(2) : ''
+    }
+  }, [])
+
   const onScroll = () => {
     cancelAnimationFrame(raf.current)
-    raf.current = requestAnimationFrame(() => setScrollY(scroller.current?.scrollTop ?? 0))
+    raf.current = requestAnimationFrame(() => { setScrollY(scroller.current?.scrollTop ?? 0); focusCards() })
   }
+
+  // cards change size as their covers render, so re-focus after layout settles
+  useEffect(() => {
+    focusCards()
+    const t = [setTimeout(focusCards, 300), setTimeout(focusCards, 1200)]
+    return () => t.forEach(clearTimeout)
+  }, [focusCards, tab, all.length])
 
   const open = (z: ZineDoc, rect: DOMRect) => go({ name: 'preview', id: z.id, from: rect })
 

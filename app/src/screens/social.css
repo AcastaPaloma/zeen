@@ -304,3 +304,16 @@
 .intro-steps span { width: 7px; height: 7px; border-radius: 4px; background: #D6D6D6; transition: width var(--t-med) var(--ease-out), background var(--t-med); }
 .intro-steps span.on { width: 20px; background: var(--ink); }
 .intro-start { width: 100%; max-width: 320px; animation: pop-in 360ms var(--ease-spring) both; }
+
+/* community titles in each community's own face (CommunityTitle in Ransom.tsx) */
+.ct { font-style: normal; font-weight: 400; }
+.ct-marker { font-weight: 800; letter-spacing: -0.03em; }
+.ct-typewriter { letter-spacing: -0.02em; }
+.ct-mono { letter-spacing: -0.03em; }
+.cm-title.ct-mono { font-size: 25px; line-height: 1.15; }
+.pr-title.ct-mono { font-size: 31px; line-height: 1.1; }
+.cmp-t.ct-mono { font-size: 17px; }
+.cm-title.ct-typewriter { font-size: 32px; }
+.ct-ransom { letter-spacing: 0; line-height: 1.2; }
+.cm-prompt .cmp-t.ct, .pr-title.ct { font-weight: 400; }
+.cm-prompt .cmp-t.ct-marker, .pr-title.ct-marker { font-weight: 800; }

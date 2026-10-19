@@ -10,7 +10,7 @@ import type { ScrapItem, ZineDoc, ZObject } from '../lib/types'
 import { FEELS } from '../three/spring'
 import type { ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
-import { Button, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
+import { Button, DitherImg, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
 import { copyLink, HeartSticker, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicTile, AlbumPopup, type Box } from './Preview'
 import './reading.css'
@@ -29,7 +29,7 @@ function KfThumb({ doc, i, on, onClick }: { doc: ZineDoc; i: number; on: boolean
   }, [doc, i])
   return (
     <button className={`kf-thumb ${on ? 'on' : ''}`} onClick={onClick} aria-label={`Go to ${doc.keyframes[i].name || 'keyframe ' + (i + 1)}`} aria-current={on}>
-      {src ? <img src={src} alt="" /> : <span />}
+      {src ? <DitherImg src={src} color="#000000" size={28} scale={1} colorful /> : <span />}
     </button>
   )
 }
@@ -49,7 +49,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const { go, back, toggleLike, toggleSave, setReadProgress, markSeen, showToast } = useApp.getState()
   const [scene, setScene] = useState<ZineScene | null>(null)
   const [t, setT] = useState(0)
-  const [offFlow, setOffFlow] = useState(false)
   const [page, setPage] = useState<{ n: number; total: number; side: 'front' | 'back' }>({ n: 1, total: 1, side: 'front' })
   const [slap, setSlap] = useState(0)
   const [mutedS, setMutedS] = useState(isMuted())
@@ -81,7 +80,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     if (!scene || !doc) return
     k = Math.max(0, Math.min(last, Math.round(k)))
     setT(k)
-    setOffFlow(false)
     scene.setAngles(fullPose(k), { animate: opts.animate !== false, feel, sequential: doc.transition.mode === 'sequential' })
     setReadProgress(id, k)
     clearTimeout(endTimer.current)
@@ -102,12 +100,12 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id])
 
-  // leaving the authored path: grabbing a light dims the slider until the reader rejoins
+  // grabbing a light is free play; touching the ruler again poses the zine at the ruler's frame
   useEffect(() => {
     if (!scene) return
     const offs = [
       scene.on('handle-down', () => {
-        setOffFlow(true); setEndOpen(false)
+        setEndOpen(false)
         if (!useApp.getState().seenCoach['read-hint']) { markSeen('read-hint'); setShowHint(false) }
       }),
     ]
@@ -134,24 +132,9 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
   useEffect(() => () => clearTimeout(endTimer.current), [])
 
-  const backToFlow = () => {
-    if (!scene || !doc) return
-    const cur = scene.angles()
-    let best = 0, bd = Infinity
-    kfs.forEach((_, k) => {
-      const p = fullPose(k)
-      let d = 0
-      for (const c of doc.creases) d += Math.abs((cur[c.id] ?? 0) - p[c.id])
-      if (d < bd) { bd = d; best = k }
-    })
-    haptic('tap')
-    goTo(best)
-  }
-
   const scrub = (v: number) => {
     if (!scene) return
     setT(v)
-    if (offFlow) setOffFlow(false)
     setEndOpen(false)
     scene.setAngles(scene.poseAt(v), { feel: { k: 420, c: 42 } })
   }
@@ -230,7 +213,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
   if (!doc) return <div className="screen dots"><div className="top-bar"><PillGroup className="solo"><IconBtn name="x" label="Close" onClick={back} /></PillGroup></div></div>
 
-  const rejoin = offFlow
   const author = useApp.getState().users.find(u => u.id === doc.author)
 
   return (
@@ -256,19 +238,16 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       )}
 
       <div className="read-bottom">
-        <div className="read-caption">{rejoin ? 'free play — the folds are yours' : 'drag the glowing edges to unfold'}</div>
-        {rejoin && (
-          <button className="flow-chip" onClick={backToFlow}><Icon name="rotate" size={15} />Back to flow</button>
-        )}
+        <div className="read-caption">drag the glowing edges to unfold</div>
         {kfs.length > 1 && (
           <>
-            <div className={`kf-strip hscroll ${rejoin ? 'dimmed' : ''}`}>
-              {kfs.map((_, i) => <KfThumb key={i} doc={doc} i={i} on={!rejoin && Math.round(t) === i} onClick={() => { haptic('tick'); goTo(i) }} />)}
+            <div className="kf-strip hscroll">
+              {kfs.map((_, i) => <KfThumb key={i} doc={doc} i={i} on={Math.round(t) === i} onClick={() => { haptic('tick'); goTo(i) }} />)}
             </div>
             <div className="ruler-row">
-              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.ceil(t - 0.01) - 1) }} disabled={t <= 0 && !rejoin} aria-label="Previous keyframe"><Icon name="left" size={18} /></button>
-              <Ruler value={t} count={kfs.length} onChange={scrub} onRelease={v => goTo(v)} dimmed={rejoin} />
-              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.floor(t + 0.01) + 1) }} disabled={t >= last && !rejoin} aria-label="Next keyframe"><Icon name="right" size={18} /></button>
+              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.ceil(t - 0.01) - 1) }} disabled={t <= 0} aria-label="Previous keyframe"><Icon name="left" size={18} /></button>
+              <Ruler value={t} count={kfs.length} onChange={scrub} onRelease={v => goTo(v)} />
+              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.floor(t + 0.01) + 1) }} disabled={t >= last} aria-label="Next keyframe"><Icon name="right" size={18} /></button>
             </div>
           </>
         )}
@@ -299,7 +278,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
           <button className={liked ? 'on' : ''} onClick={like}><Icon name="heart" size={22} fill={liked ? 'currentColor' : undefined} /><span>{liked ? 'Liked' : 'Like'}</span></button>
           <button className={saved ? 'on' : ''} onClick={save}><Icon name="bookmark" size={22} fill={saved ? 'currentColor' : undefined} /><span>{saved ? 'Saved' : 'Save'}</span></button>
           <button onClick={() => go({ name: 'create', replyTo: doc.id })}><Icon name="reply" size={22} /><span>Reply zine</span></button>
-          <button onClick={() => goTo(0)}><Icon name="rotate" size={22} /><span>Again</span></button>
+          <button onClick={() => goTo(0)}><Icon name="replay" size={22} /><span>Again</span></button>
         </div>
         {more.length > 0 && (
           <>

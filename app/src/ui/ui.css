@@ -264,3 +264,12 @@
   75% { transform: translate(-50%, -50%) scale(1.08) rotate(-12deg); }
   100% { transform: translate(-50%, -50%) scale(1) rotate(-10deg); }
 }
+
+/* Material icons (Icon.tsx): heart and bookmark swap to their filled form when on */
+.icon .i-solid { display: none; }
+.icon.i-filled .i-line, .liked .icon .i-line, .saved .icon .i-line, .on > .icon .i-line { display: none; }
+.icon.i-filled .i-solid, .liked .icon .i-solid, .saved .icon .i-solid, .on > .icon .i-solid { display: inline; }
+
+/* ransom letters (Ransom.tsx): each one cut from a different magazine */
+.rn-ch { display: inline-block; padding: 0 0.06em; margin: 0.03em 0.02em; line-height: 1.05; }
+.rn-sp { display: inline-block; width: 0.35em; }

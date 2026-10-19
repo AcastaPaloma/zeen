@@ -191,6 +191,8 @@ export interface Community {
   members: number
   perMonth: number
   color: string
+  /** the face its titles are set in, in keeping with the community */
+  font: ZineFont
   prompt: { title: string; body: string; due: string }
   rules: string[]
   mods: string[]

@@ -281,8 +281,6 @@ canvas.layer-thumb { image-rendering: auto; }
 .te-preview.style-box .te-line span { background: var(--box); }
 .te-preview.style-outline { -webkit-text-stroke: 0.14em var(--stroke); paint-order: stroke fill; }
 .te-preview.style-plain { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.15); }
-.rn-ch { display: inline-block; padding: 0 0.06em; margin: 0.03em 0.02em; line-height: 1.05; }
-.rn-sp { display: inline-block; width: 0.35em; }
 
 .te-tools { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px; padding: 0 14px; transition: bottom 200ms var(--ease-out); }
 .te-fonts, .te-colors { gap: 8px; margin: 0 -14px; padding: 6px 14px 4px; }
