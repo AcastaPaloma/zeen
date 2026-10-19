@@ -26,7 +26,7 @@
 }
 
 .boot { display: grid; place-items: center; }
-.boot-mark { font-family: 'Pinyon Script', cursive; font-size: 54px; color: var(--ink); animation: fade-in 600ms ease both; }
+.boot-mark { width: 46%; max-width: 200px; height: auto; animation: fade-in 600ms ease both; }
 
 /* ---------------------------------------------------------------- bottom nav + search pull tab */
 

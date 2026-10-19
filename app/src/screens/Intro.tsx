@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { BRAND } from '../lib/assets'
 import { haptic, sfx } from '../lib/feedback'
 import { uid } from '../lib/geom'
 import { newDoc } from '../lib/paper'
@@ -28,7 +29,7 @@ function introDoc(): ZineDoc {
   const cx = (i: number) => i * pw + pw / 2
   d.objects = [
     // cover: the left door's back
-    text('Zeen', 'back', cx(2), ph * 0.36, 3.4, 'script', '#1A1A1A', { rot: -0.06 }),
+    { ...sticker(BRAND.logo, 'back', cx(2), ph * 0.34, pw * 0.72, (pw * 0.72 * 480) / 1313, -0.04), name: 'Zeen', sticker: 0, shadow: false },
     text('a zine about\nmaking zines', 'back', cx(2), ph * 0.58, 0.8, 'typewriter', '#555'),
     text('drag the light →', 'back', cx(2), ph * 0.86, 0.75, 'marker', '#FF4934', { rot: 0.03 }),
     // revealed when the left door opens
@@ -103,7 +104,7 @@ export default function Intro(_: { active: boolean }) {
     <div className="intro dots">
       <ZineView doc={doc} mode="page" onScene={onScene} keepAngles />
       <div className="intro-top">
-        <span className="intro-logo">Zeen</span>
+        <img className="intro-logo" src={BRAND.logo} alt="Zeen" draggable={false} />
         <button className="intro-skip" onClick={finish}>Skip</button>
       </div>
       <div className="intro-bottom">

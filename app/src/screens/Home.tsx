@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { BRAND } from '../lib/assets'
 import { haptic } from '../lib/feedback'
 import { clamp } from '../lib/geom'
 import { ME } from '../lib/samples'
@@ -186,7 +187,7 @@ export default function Home({ active }: { active: boolean }) {
   return (
     <div className="screen home" aria-hidden={!active}>
       <header ref={head} className={`home-head ${scrollY[feedPage] > 8 ? 'scrolled' : ''}`}>
-        <div className="logo" aria-label="Zeen">Zeen<span className="logo-dot" /></div>
+        <img className="logo" src={BRAND.logo} alt="Zeen" draggable={false} />
         <nav className="home-tabs" role="tablist">
           <button role="tab" aria-selected={page === 'discover'} className={page === 'discover' ? 'on' : ''} onClick={() => switchTo('discover')}>Discover</button>
           <button role="tab" aria-selected={page === 'following'} className={page === 'following' ? 'on' : ''} onClick={() => switchTo('following')}>Following</button>

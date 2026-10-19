@@ -43,16 +43,8 @@
   transition: box-shadow var(--t-med);
 }
 .home-head > * { pointer-events: auto; }
-.logo {
-  position: relative;
-  font-family: 'Pinyon Script', cursive;
-  font-size: 30px; line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  padding: 4px 10px 0 2px;
-  user-select: none;
-}
-.logo-dot { position: absolute; right: 0; bottom: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+/* the Zeen wordmark (public/assets/brand/zeen-logo.svg) */
+.logo { display: block; height: 28px; width: auto; margin-left: 2px; user-select: none; }
 .home-tabs { display: flex; gap: 2px; }
 .home-tabs button {
   height: 36px; padding: 0 9px;

@@ -28,6 +28,12 @@ export const COVERS: Record<string, string> = Object.fromEntries(
     .map(n => [n, `${A}/covers/${n}.webp`]),
 )
 
+/** The Zeen wordmark (with its scissors mark and orange dot) and the app icon, from the brand files. */
+export const BRAND = {
+  logo: `${A}/brand/zeen-logo.svg`,
+  icon: `${A}/brand/zeen-icon.svg`,
+}
+
 export const TOOLS = {
   scissors: `${A}/tools/scissors.webp`,
   bonefolder: `${A}/tools/bonefolder.webp`,

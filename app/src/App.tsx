@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { loadFonts, preload, TOOLS } from './lib/assets'
+import { BRAND, loadFonts, preload, TOOLS } from './lib/assets'
 import { useApp, type Route } from './lib/store'
 import { BottomNav } from './ui/BottomNav'
 import { DitherDefs, Toast } from './ui/kit'
@@ -67,7 +67,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [leaving])
 
-  if (!ready) return <div className="device boot"><div className="boot-mark">Zeen</div></div>
+  if (!ready) return <div className="device boot"><img className="boot-mark" src={BRAND.logo} alt="Zeen" /></div>
 
   // home stays mounted underneath everything; otherwise only the top two screens stay mounted.
   // A popped screen keeps its key while it animates out, so React keeps the same instance.
