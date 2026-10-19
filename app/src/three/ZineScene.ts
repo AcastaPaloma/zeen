@@ -89,6 +89,8 @@ export class ZineScene {
    * fingers pinch and pan; nothing a drag does turns it over (the reader leaves that to double-tap)
    */
   dragPan = false
+  /** a fold let go mid-way springs fully closed or fully open, whichever is nearer (the reader); else it holds */
+  snapFolds = false
   private panVel = new Vector2()
   private panAt = 0
   private hintPending = false
@@ -1073,8 +1075,10 @@ export class ZineScene {
       el.removeEventListener('pointercancel', up)
       el.classList.remove('active')
       const v = this.drag.vel
-      // flick: snap fully open or closed in the flick direction; slow release holds the angle
+      // flick: snap fully open or closed in the flick direction; a slow release holds the angle, or with
+      // snapFolds goes to whichever end is nearer
       if (Math.abs(v) > 260) { s.v = v * 0.5; s.to(v > 0 ? 180 : 0, this.feel) }
+      else if (this.snapFolds) s.to(s.x >= 90 ? 180 : 0, this.feel)
       else if (s.x > 176) s.to(180); else if (s.x < 4) s.to(0)
       this.drag = null
       this.emit('angle-commit', { id, angle: s.target })

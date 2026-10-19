@@ -110,6 +110,8 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     // drag to move the zine around; turning it over is double-tap only
     s.dragPan = true
     s.oneFingerSwipe = false
+    // folds never rest half-open: let go and the page snaps folded or unfolded
+    s.snapFolds = true
     const start = Math.min(useApp.getState().readProgress[id] ?? 0, Math.max(0, doc.keyframes.length - 1))
     const pose: Record<string, number> = {}
     for (const c of doc.creases) pose[c.id] = doc.keyframes[start]?.angles[c.id] ?? c.angle

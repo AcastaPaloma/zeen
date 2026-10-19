@@ -347,7 +347,9 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
   useEffect(() => {
     if (!scene) return
     scene.handlers.tap = p => {
-      if (gatedNow || !scene.pick(p.x, p.y)) return
+      // a tap off the zine goes back to where it came from
+      if (!scene.pick(p.x, p.y)) { clearTimeout(tapTimer.current); close(); return }
+      if (gatedNow) return
       clearTimeout(tapTimer.current)
       tapTimer.current = window.setTimeout(() => { haptic('tap'); scene.flip() }, 300)
     }
@@ -358,7 +360,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
       go({ name: 'read', id })
       return true
     }
-  }, [scene, id, go, gatedNow])
+  }, [scene, id, go, gatedNow, close])
   useEffect(() => () => clearTimeout(tapTimer.current), [])
 
   if (!doc) {
@@ -373,7 +375,8 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
   const gated = !!doc.publish.contentNote && !noteOk
 
   return (
-    <div className="screen preview" ref={root}>
+    <div className="screen preview" ref={root}
+      onClick={e => { const t = e.target as HTMLElement; if (t === e.currentTarget || t.classList.contains('top-bar')) close() }}>
       <div className="top-bar">
         <PillGroup className="solo"><IconBtn name="back" label="Back" onClick={close} /></PillGroup>
         <PillGroup>
