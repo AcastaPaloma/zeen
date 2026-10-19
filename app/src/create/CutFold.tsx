@@ -6,7 +6,7 @@ import { cutPath, flapOf, panelDepth, type CutStyle } from '../lib/paper'
 import { useApp } from '../lib/store'
 import type { Crease, Vec2, ZineDoc } from '../lib/types'
 import { FEELS } from '../three/spring'
-import type { PointerInfo, ZineScene } from '../three/ZineScene'
+import type { CreaseMark, PointerInfo, ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
 import { CheckBtn, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Toggle, VSlider } from '../ui/kit'
 import type { StepProps } from './Create'
@@ -39,6 +39,23 @@ interface Drag {
 interface LastAction { kind: 'cut' | 'fold'; panel: string; A: Vec2; B: Vec2; finger: Vec2[]; seed: number; pre: ZineDoc; style: CutStyle }
 
 const SNAP_PX = 14
+const FOLD = '#5C5CE3'
+
+/**
+ * Crease lines as marks on the paper (ZineScene.setCreaseMarks): every fold as a faint dashed line,
+ * the selected one solid in the fold colour, and the fold being drawn dashed in the fold colour.
+ */
+function creaseMarks(creases: Crease[], sel: string | null, active?: Crease | null): CreaseMark[] {
+  const out: CreaseMark[] = []
+  for (const k of creases) {
+    if (k.leaf || k.id === active?.id) continue
+    out.push(k.id === sel
+      ? { panel: k.panel, a: k.a, b: k.b, color: FOLD, width: 0.08, opacity: 0.95 }
+      : { panel: k.panel, a: k.a, b: k.b, color: '#1A1A1A', width: 0.04, opacity: 0.24, dash: [0.28, 0.2] })
+  }
+  if (active) out.push({ panel: active.panel, a: active.a, b: active.b, color: FOLD, width: 0.07, opacity: 0.95, dash: [0.3, 0.18] })
+  return out
+}
 
 export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
   const ed = useEditor()
@@ -66,6 +83,16 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
   const docRef = useRef(doc)
   docRef.current = doc
   const cut = ed.cut
+  const selRef = useRef(sel)
+  selRef.current = sel
+  const xrayRef = useRef(xray)
+  xrayRef.current = xray
+  /** redraw the crease marks, with `active` as the crease being drawn or dragged */
+  const marks = useCallback((active?: Crease | null) => {
+    scene?.setCreaseMarks(creaseMarks(docRef.current.creases, selRef.current, active), xrayRef.current)
+  }, [scene])
+  useEffect(() => { marks() }, [marks, doc.creases, sel, xray])
+  useEffect(() => () => scene?.setCreaseMarks([]), [scene])
 
   // ---------------------------------------------------------------- scene wiring
 
@@ -125,53 +152,21 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
     const ctx = c.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, W, H)
+    // creases are marks on the paper itself (creaseMarks); this overlay only carries the cut line and end points
     const d = dragRef.current
-    // x-ray creases
-    if (xray) {
-      ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(92,92,227,0.8)'; ctx.lineWidth = 1.2
-      for (const k of docRef.current.creases) {
-        if (k.leaf) continue
-        const a = scene.flatToScreen(k.panel, k.a), b = scene.flatToScreen(k.panel, k.b)
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke()
-      }
-      ctx.setLineDash([])
-    }
-    if (sel) {
-      const k = docRef.current.creases.find(x => x.id === sel)
-      if (k) {
-        const a = scene.flatToScreen(k.panel, k.a), b = scene.flatToScreen(k.panel, k.b)
-        ctx.strokeStyle = 'rgba(92,92,227,0.9)'; ctx.lineWidth = 3; ctx.lineCap = 'round'
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke()
-      }
-    }
-    if (!d) return
-    const color = d.kind === 'cut' ? '#FF4934' : '#5C5CE3'
-    let pts: [number, number][]
+    if (!d || d.kind === 'page') return
     if (d.kind === 'cut') {
       const path = cutPath(cut.style, d.A, d.B, d.finger, cut.roughness, d.seed, cut.ruler)
-      pts = path.map(p => scene.flatToScreen(d.panel, p))
-    } else if (d.kind === 'page' && d.crease) {
-      pts = [scene.flatToScreen(d.crease.panel, d.crease.a), scene.flatToScreen(d.crease.panel, d.crease.b)]
-    } else {
-      pts = [d.sA, d.sB]
+      const pts = path.map(p => scene.flatToScreen(d.panel, p))
+      ctx.setLineDash([7, 6]); ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+      ctx.strokeStyle = '#FF4934'
+      ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke()
+      ctx.setLineDash([])
     }
-    if (d.kind === 'cut') {
-      ctx.setLineDash([7, 6]); ctx.lineWidth = 2.6
-    } else {
-      ctx.setLineDash([]); ctx.lineWidth = 4
-      ctx.strokeStyle = 'rgba(222,255,124,0.9)'
-      ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1] + 1.5) : ctx.moveTo(p[0], p[1] + 1.5))); ctx.stroke()
-      ctx.lineWidth = 3.2
-    }
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-    ctx.strokeStyle = color
-    ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke()
-    ctx.setLineDash([])
-    if (d.kind !== 'page') {
-      ring(ctx, pts[0], color, '#fff')
-      ring(ctx, pts[pts.length - 1], color, '#DEFF7C')
-    }
-  }, [scene, cut, sel, xray])
+    const color = d.kind === 'cut' ? '#FF4934' : FOLD
+    ring(ctx, scene.flatToScreen(d.panel, d.A), color)
+    ring(ctx, scene.flatToScreen(d.panel, d.B), color)
+  }, [scene, cut])
 
   useEffect(() => {
     if (!scene) return
@@ -275,12 +270,13 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
       const pv = cutPreview(scene, d.panel, path)
       scene.setTint(d.panel, pv?.region ?? null, '#FF4934', 0.3)
     } else if (d.kind === 'fold') {
-      if (dist(d.A, d.B) < 0.6) { scene.setGhost(null, null, null); scene.setTint(null, null); return }
+      if (dist(d.A, d.B) < 0.6) { scene.setGhost(null, null, null); scene.setTint(null, null); marks(); return }
       const pv = foldPreview(scene, d.panel, d.A, d.B)
-      scene.setGhost(pv ? d.panel : null, pv?.region ?? null, pv?.crease ?? null)
-      scene.setTint(pv ? d.panel : null, pv?.region ?? null, '#5C5CE3', 0.18)
+      scene.setGhost(pv ? d.panel : null, pv?.region ?? null, pv?.crease ?? null, FOLD, 0.2)
+      scene.setTint(pv ? d.panel : null, pv?.region ?? null, FOLD, 0.12)
+      marks(pv?.crease ?? null)
     }
-  }, [scene, cut])
+  }, [scene, cut, marks])
 
   useEffect(() => {
     if (!scene) return
@@ -313,6 +309,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
           const clickAt = [fixed ? panelDepth(fixed.region, k) : 0, flap ? panelDepth(flap.region, k) : 0].filter(v => v > 0.5)
           const d: Drag = { kind: 'page', panel: k.panel, A: k.a, B: k.b, sA: [p.x, p.y], sB: [p.x, p.y], finger: [], seed: 0, snapKey: '', crease: k, length: 0, clickAt, clicked: -1 }
           dragRef.current = d; setDrag(d); setSel(null)
+          marks(k)
           haptic('tick')
           return true
         }
@@ -382,6 +379,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         setDrag(null)
         scene.setTint(null, null)
         scene.setGhost(null, null, null)
+        marks()
         if (!d) return
         const docNow = docRef.current
         if (d.cancelHover) { haptic('tap'); return }
@@ -406,7 +404,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
       },
       toolCancel: () => {
         dragRef.current = null; setDrag(null)
-        scene.setTint(null, null); scene.setGhost(null, null, null)
+        scene.setTint(null, null); scene.setGhost(null, null, null); marks()
         scene.setDoc(docRef.current, { structure: true })
       },
       tap: (p: PointerInfo) => {
@@ -420,7 +418,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
     }
     return () => { scene.handlers = {} }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, tool, sub, cut, last, snapPoint, pickPanel, nearCrease, updatePreview])
+  }, [scene, tool, sub, cut, last, snapPoint, pickPanel, nearCrease, updatePreview, marks])
 
   // ---------------------------------------------------------------- actions
 
@@ -452,7 +450,8 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
       if (replace) { useEditor.setState({ doc: res.doc }); useApp.getState().saveZine(res.doc) }
       else ed.commit(res.doc, 'Fold')
       setSel(res.crease.id)
-      setLast({ kind, panel, A, B, finger, seed, pre, style: cut.style })
+      // the fold runs the whole way across, so its end handles sit where the crease meets the paper's edge
+      setLast({ kind, panel, A: res.crease.a, B: res.crease.b, finger, seed, pre, style: cut.style })
       haptic('medium')
       if (!useApp.getState().seenCoach['drag-light']) {
         scene.showHandleHint = true
@@ -575,10 +574,11 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         {kfCount > 1 && (
           <Ruler value={kfT} count={kfCount} onChange={t => { setKfT(t); scene?.setAngles(scene.poseAt(t), { animate: false }) }} onRelease={i => goKeyframe(i)} />
         )}
-        {tool === 'pick' && <PickTray onCut={() => pickTool('cut')} onFold={() => pickTool('fold')} onMore={() => setMore(true)} />}
-        {tool === 'cut' && <CutTray value={cut.style} onChange={st => { haptic('tick'); ed.setCut({ style: st }) }} onMore={() => setMore(true)} />}
-        {tool === 'fold' && <FoldTray sub={sub} onSub={v => { haptic('tick'); setSub(v) }} onKeyframe={addKeyframe} onMore={() => setMore(true)} />}
       </div>
+
+      {tool === 'pick' && <PickTray onCut={() => pickTool('cut')} onFold={() => pickTool('fold')} onMore={() => setMore(true)} />}
+      {tool === 'cut' && <CutTray value={cut.style} onChange={st => { haptic('tick'); ed.setCut({ style: st }) }} onMore={() => setMore(true)} />}
+      {tool === 'fold' && <FoldTray sub={sub} onSub={v => { haptic('tick'); setSub(v) }} onKeyframe={addKeyframe} onMore={() => setMore(true)} />}
 
       <Sheet open={more} onClose={() => setMore(false)} title="Paper tools" dim height="tall">
         <Row label="Snap" sub="Edges, corners, creases and 15° angles"><Toggle on={cut.snap} onChange={v => ed.setCut({ snap: v })} label="Snap" /></Row>
@@ -605,7 +605,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
   )
 }
 
-function ring(ctx: CanvasRenderingContext2D, p: [number, number], stroke: string, fill: string) {
+function ring(ctx: CanvasRenderingContext2D, p: [number, number], stroke: string, fill = '#fff') {
   ctx.save()
   ctx.translate(p[0], p[1])
   ctx.beginPath()

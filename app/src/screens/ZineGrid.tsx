@@ -29,7 +29,7 @@ export const ZineCard = memo(function ZineCard({ z, tag = 'none', onOpen, badge,
   const tagColor = tag === 'community' && comm ? comm.color : '#F158A7'
   return (
     <div className="zcard-wrap" style={{ transform: `translateX(${dx}px)`, ...style }}>
-      <button ref={ref} className="zcard" aria-label={`${z.publish.title || 'Untitled'}${author ? ' by ' + author.name : ''}`}
+      <button ref={ref} className="zcard" data-zine={z.id} aria-label={`${z.publish.title || 'Untitled'}${author ? ' by ' + author.name : ''}`}
         style={{ '--tilt': `${tilt}deg` } as CSSProperties}
         onClick={() => { haptic('tick'); onOpen?.(z, ref.current!.getBoundingClientRect()) }}>
         {src ? <img src={src} alt="" draggable={false} /> : <span className="zcard-ph" />}

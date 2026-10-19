@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { boxCorners, objectAt, objectBox, objectImage } from '../create/collageUtil'
 import { haptic, isMuted, setMuted, sfx } from '../lib/feedback'
 import { music } from '../lib/music'
@@ -10,9 +10,9 @@ import type { ScrapItem, ZineDoc, ZObject } from '../lib/types'
 import { FEELS } from '../three/spring'
 import type { ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
-import { Button, DitherImg, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
+import { bgVars, Button, DitherImg, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
-import { copyLink, HeartSticker, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicTile, AlbumPopup, type Box } from './Preview'
+import { copyLink, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicTile, AlbumPopup, type Box } from './Preview'
 import './reading.css'
 
 /** Scrapbook id for an object saved out of a zine, so saving it twice doesn't duplicate it. */
@@ -29,7 +29,7 @@ function KfThumb({ doc, i, on, onClick }: { doc: ZineDoc; i: number; on: boolean
   }, [doc, i])
   return (
     <button className={`kf-thumb ${on ? 'on' : ''}`} onClick={onClick} aria-label={`Go to ${doc.keyframes[i].name || 'keyframe ' + (i + 1)}`} aria-current={on}>
-      {src ? <DitherImg src={src} color="#000000" size={28} scale={1} colorful /> : <span />}
+      {src ? <DitherImg src={src} size={[64, 44]} /> : <span />}
     </button>
   )
 }
@@ -50,7 +50,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const [scene, setScene] = useState<ZineScene | null>(null)
   const [t, setT] = useState(0)
   const [page, setPage] = useState<{ n: number; total: number; side: 'front' | 'back' }>({ n: 1, total: 1, side: 'front' })
-  const [slap, setSlap] = useState(0)
   const [mutedS, setMutedS] = useState(isMuted())
   const [endOpen, setEndOpen] = useState(false)
   /** long-press menu; `obj` is the scrap, text or drawing under the finger, if any */
@@ -61,6 +60,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const root = useRef<HTMLDivElement>(null)
   const press = useRef<{ x: number; y: number; timer: number } | null>(null)
   const endTimer = useRef(0)
+  const strip = useRef<HTMLDivElement>(null)
   const box = useZineBox(scene)
   const thumb = useThumb(doc)
   useZineMusic(doc, active)
@@ -76,21 +76,40 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     return o
   }, [doc, kfs])
 
-  const goTo = useCallback((k: number, opts: { animate?: boolean } = {}) => {
+  // the ruler glides to a keyframe picked from the strip or the arrows, instead of jumping to it
+  const tNow = useRef(t)
+  tNow.current = t
+  const glide = useRef(0)
+  const glideT = useCallback((to: number) => {
+    cancelAnimationFrame(glide.current)
+    const from = tNow.current, t0 = performance.now()
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 420)
+      setT(from + (to - from) * (1 - (1 - k) ** 3))
+      if (k < 1) glide.current = requestAnimationFrame(step)
+    }
+    glide.current = requestAnimationFrame(step)
+  }, [])
+  useEffect(() => () => cancelAnimationFrame(glide.current), [])
+
+  const goTo = useCallback((k: number, opts: { animate?: boolean; glide?: boolean } = {}) => {
     if (!scene || !doc) return
     k = Math.max(0, Math.min(last, Math.round(k)))
-    setT(k)
+    if (opts.glide) glideT(k); else { cancelAnimationFrame(glide.current); setT(k) }
     scene.setAngles(fullPose(k), { animate: opts.animate !== false, feel, sequential: doc.transition.mode === 'sequential' })
     setReadProgress(id, k)
     clearTimeout(endTimer.current)
     if (k === last && last > 0) endTimer.current = window.setTimeout(() => setEndOpen(true), 900)
     else setEndOpen(false)
-  }, [scene, doc, last, fullPose, feel, id, setReadProgress])
+  }, [scene, doc, last, fullPose, feel, id, setReadProgress, glideT])
 
   const onScene = useCallback((s: ZineScene | null) => {
     setScene(s)
     if (!s || !doc) return
     s.fitMargin = 1.34
+    // drag to move the zine around; turning it over is double-tap only
+    s.dragPan = true
+    s.oneFingerSwipe = false
     const start = Math.min(useApp.getState().readProgress[id] ?? 0, Math.max(0, doc.keyframes.length - 1))
     const pose: Record<string, number> = {}
     for (const c of doc.creases) pose[c.id] = doc.keyframes[start]?.angles[c.id] ?? c.angle
@@ -132,6 +151,27 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
   useEffect(() => () => clearTimeout(endTimer.current), [])
 
+  // keep the current keyframe's thumbnail in the middle of the strip, over the ruler's playhead
+  const kfNow = Math.round(t)
+  const kfShown = useRef(kfNow)
+  kfShown.current = kfNow
+  const centreThumb = useCallback((smooth: boolean) => {
+    const el = strip.current
+    const on = el?.children[kfShown.current] as HTMLElement | undefined
+    if (!el || !on) return
+    const r = el.getBoundingClientRect(), b = on.getBoundingClientRect()
+    el.scrollTo({ left: el.scrollLeft + (b.left + b.width / 2) - (r.left + r.width / 2), behavior: smooth ? 'smooth' : 'auto' })
+  }, [])
+  useEffect(() => { centreThumb(true) }, [kfNow, centreThumb])
+  // thumbnails render in after mount and change width: keep the current one centred as they do
+  useEffect(() => {
+    const el = strip.current
+    if (!el) return
+    const ro = new ResizeObserver(() => centreThumb(false))
+    for (const c of el.children) ro.observe(c)
+    return () => ro.disconnect()
+  }, [kfs.length, centreThumb])
+
   const scrub = (v: number) => {
     if (!scene) return
     setT(v)
@@ -141,7 +181,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
   const like = () => {
     const on = toggleLike(id)
-    if (on) { setSlap(Date.now()); sfx('slap'); haptic('double') } else haptic('tick')
+    if (on) { sfx('pop'); haptic('double') } else haptic('tick')
   }
   const save = () => {
     const on = toggleSave(id)
@@ -153,7 +193,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     setMutedS(m); setMuted(m); music.setMuted(m); haptic('tick')
   }
 
-  useEffect(() => { if (scene) scene.handlers.doubleTap = p => { if (!scene.pick(p.x, p.y)) return false; if (!liked) like(); else { setSlap(Date.now()); sfx('slap') } return true } })
+  useEffect(() => { if (scene) scene.handlers.doubleTap = () => { scene.flip(); haptic('tap'); return true } }, [scene])
 
   // long-press on the paper: Copy / Save to scrapbook (the thing under the finger) / Save / Share
   const onPointerDown = (e: React.PointerEvent) => {
@@ -216,7 +256,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const author = useApp.getState().users.find(u => u.id === doc.author)
 
   return (
-    <div className="screen read dots" ref={root} style={{ '--bg': doc.bg } as CSSProperties}>
+    <div className="screen read dots" ref={root} style={bgVars(doc.bg)}>
       <div className="top-bar">
         <PillGroup className="solo"><IconBtn name="x" label="Close" onClick={back} /></PillGroup>
         <div className="page-ind" aria-live="polite">{page.side === 'back' ? 'Back · ' : ''}Page {page.n} of {page.total}</div>
@@ -230,7 +270,6 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
       <div className="read-stage" ref={stage} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <ZineView doc={doc} mode="page" keepAngles={false} onScene={onScene} />
-        {liked && <HeartSticker box={box} fresh={slap} />}
       </div>
 
       {showHint && !seenHint && (
@@ -238,16 +277,16 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       )}
 
       <div className="read-bottom">
-        <div className="read-caption">drag the glowing edges to unfold</div>
+        <div className="read-caption">drag the lights to unfold · double-tap to turn over</div>
         {kfs.length > 1 && (
           <>
-            <div className="kf-strip hscroll">
-              {kfs.map((_, i) => <KfThumb key={i} doc={doc} i={i} on={Math.round(t) === i} onClick={() => { haptic('tick'); goTo(i) }} />)}
+            <div className="kf-strip hscroll" ref={strip}>
+              {kfs.map((_, i) => <KfThumb key={i} doc={doc} i={i} on={Math.round(t) === i} onClick={() => { haptic('tick'); goTo(i, { glide: true }) }} />)}
             </div>
             <div className="ruler-row">
-              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.ceil(t - 0.01) - 1) }} disabled={t <= 0} aria-label="Previous keyframe"><Icon name="left" size={18} /></button>
+              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.ceil(t - 0.01) - 1, { glide: true }) }} disabled={t <= 0} aria-label="Previous keyframe"><Icon name="left" size={18} /></button>
               <Ruler value={t} count={kfs.length} onChange={scrub} onRelease={v => goTo(v)} />
-              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.floor(t + 0.01) + 1) }} disabled={t >= last} aria-label="Next keyframe"><Icon name="right" size={18} /></button>
+              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.floor(t + 0.01) + 1, { glide: true }) }} disabled={t >= last} aria-label="Next keyframe"><Icon name="right" size={18} /></button>
             </div>
           </>
         )}

@@ -7,7 +7,7 @@ import { useApp, type CreateStep } from '../lib/store'
 import type { PaperStock, ZineDoc } from '../lib/types'
 import { music } from '../lib/music'
 import { Icon } from '../ui/Icon'
-import { Button, CheckBtn, IconBtn, PillGroup, Sheet, VSlider } from '../ui/kit'
+import { bgVars, Button, CheckBtn, IconBtn, PillGroup, Sheet, VSlider } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
 import { HERO, type ZineScene } from '../three/ZineScene'
 import { useEditor } from './editor'
@@ -37,6 +37,7 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
   const back = useApp(s => s.back)
   const showToast = useApp(s => s.showToast)
   const ed = useEditor()
+  const dock = useEditor(s => s.dock)
   const [scene, setScene] = useState<ZineScene | null>(null)
   const [starting, setStarting] = useState(!id)
   const [draft, setDraft] = useState<ZineDoc | null>(null)
@@ -82,7 +83,7 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
   }
 
   return (
-    <div className={`screen create dots step-${starting ? 'start' : step}`} style={{ '--bg': doc?.bg } as React.CSSProperties}>
+    <div className={`screen create dots step-${starting ? 'start' : step}`} data-dock={dock} style={bgVars(doc?.bg)}>
       <ZineView doc={doc} mode="free" onScene={setScene} handles={!starting} keepAngles />
       {starting && draft && (
         <StartSheet draft={draft} setDraft={setDraft} scene={scene} replyTo={replyTo}
@@ -91,7 +92,6 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
       )}
       {!starting && doc && (
         <>
-          <Stepper step={step} onJump={goStep} />
           {step === 'cut' && <CutFold scene={scene} doc={doc} active={active} exit={exit} next={next} />}
           <Suspense fallback={null}>
             {step === 'collage' && <Collage scene={scene} doc={doc} active={active} exit={exit} next={next} />}
@@ -101,22 +101,6 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
         </>
       )}
     </div>
-  )
-}
-
-function Stepper({ step, onJump }: { step: CreateStep; onJump: (s: CreateStep) => void }) {
-  const i = STEPS.findIndex(s => s.id === step)
-  return (
-    <nav className="stepper" aria-label="Create steps">
-      {STEPS.map((s, k) => (
-        <button key={s.id} className={`st ${k === i ? 'on' : ''} ${k < i ? 'done' : ''}`} disabled={k > i + 1}
-          aria-current={k === i ? 'step' : undefined} aria-label={s.label}
-          onClick={() => k !== i && onJump(s.id)}>
-          <span className="st-bar" />
-        </button>
-      ))}
-      <span className="st-label" key={step}>{STEPS[i].label}</span>
-    </nav>
   )
 }
 
@@ -243,7 +227,7 @@ function StartSheet({ draft, setDraft, scene, onCancel, onContinue, replyTo }: {
               {COLORS.slice(0, 5).map(c => (
                 <button key={c} className={`sw ${color === c ? 'on' : ''}`} style={{ background: c }} aria-label={`Paper colour ${c}`} onClick={() => { haptic('tick'); update(tpl, size, c) }} />
               ))}
-              <label className="sw spectrum" aria-label="Custom colour" style={{ backgroundImage: `url(${PAPER.spectrum})` }}>
+              <label className="sw spectrum" aria-label="Custom colour">
                 <input type="color" value={color} onChange={e => update(tpl, size, e.target.value)} />
               </label>
             </div>

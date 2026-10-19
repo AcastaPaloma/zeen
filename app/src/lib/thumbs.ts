@@ -3,7 +3,9 @@ import { ZineScene } from '../three/ZineScene'
 import { loadFonts, PAPER, preload } from './assets'
 import type { ZineDoc } from './types'
 
-// One hidden scene renders static cover images for feeds and shelves, one zine at a time.
+// One hidden scene renders static cover images for feeds and shelves, one zine at a time. It frames the zine
+// exactly as the preview does (same camera mode, margin and screen shape), so a card has the same proportions
+// as the zine that lifts out of it, and the zine lands back on the card without a jump.
 
 const cache = new Map<string, string>()
 const waiting = new Map<string, ((u: string) => void)[]>()
@@ -17,13 +19,13 @@ const keyOf = (z: ZineDoc) => `${z.id}:${z.updatedAt}`
 function ensureScene() {
   if (scene) return scene
   const host = document.createElement('div')
-  host.style.cssText = 'position:fixed;left:-2000px;top:0;width:360px;height:480px;pointer-events:none;opacity:0;'
+  // the preview stage's shape (3:4), large enough that the zine still renders sharply inside the preview margin
+  host.style.cssText = 'position:fixed;left:-2000px;top:0;width:510px;height:680px;pointer-events:none;opacity:0;'
   document.body.appendChild(host)
-  scene = new ZineScene(host, { mode: 'page', preserve: true })
+  scene = new ZineScene(host, { mode: 'preview', preserve: true })
   scene.handlesEnabled = false
   scene.animateContent = false
   scene.bgParallax = false
-  scene.fitMargin = 1.04
   return scene
 }
 
@@ -44,6 +46,7 @@ async function pump() {
       const kf = z.keyframes[z.publish.coverKeyframe] ?? z.keyframes[0]
       if (kf) s.setAngles(kf.angles, { animate: false })
       s.resetView(false)
+      s.tiltX.set(0); s.tiltY.set(0) // no idle sway in a still
       s.invalidateAll()
       s.renderOnce()
       const url = cropToContent(s.canvas)

@@ -4,7 +4,6 @@ import { ME } from '../lib/samples'
 import { addCommunityPost, published, useApp } from '../lib/store'
 import { useThumb } from '../lib/thumbs'
 import type { Post, ZineDoc } from '../lib/types'
-import { BottomNav } from '../ui/BottomNav'
 import { Icon } from '../ui/Icon'
 import { Avatar, Button, fmtCount, Sheet, timeAgo } from '../ui/kit'
 import { CommunityTitle } from '../ui/Ransom'
@@ -234,7 +233,6 @@ export default function CommunityScreen({ id }: { active: boolean; id?: string }
           </div>
         )}
       </div>
-      <BottomNav current="home" />
     </div>
   )
 }

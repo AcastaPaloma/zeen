@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { trackById } from '../lib/assets'
 import { published, useApp } from '../lib/store'
 import { useThumb } from '../lib/thumbs'
@@ -26,6 +27,7 @@ function ZineRow({ z, onOpen }: { z: ZineDoc; onOpen: (z: ZineDoc) => void }) {
 export default function Search() {
   const open = useApp(s => s.searchOpen)
   const setOpen = useApp(s => s.setSearchOpen)
+  const from = useApp(s => s.searchFrom)
   const zines = useApp(s => s.zines)
   const users = useApp(s => s.users)
   const communities = useApp(s => s.communities)
@@ -36,7 +38,8 @@ export default function Search() {
   const input = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (open) { const t = setTimeout(() => input.current?.focus(), 320); return () => clearTimeout(t) }
+    if (open) { const t = setTimeout(() => input.current?.focus({ preventScroll: true }), 360); return () => clearTimeout(t) }
+    input.current?.blur()
     setQ('')
   }, [open])
 
@@ -67,8 +70,11 @@ export default function Search() {
   const openZine = (z: ZineDoc) => { commit(); close(); go({ name: 'preview', id: z.id, from: null }) }
   const empty = res && !res.zines.length && !res.makers.length && !res.communities.length && !res.tags.length && !res.songs.length
 
-  return (
-    <Sheet open={open} onClose={close} height="full" dim className="search-sheet"
+  // the sheet lives on the device, above the bottom nav, so its field can sit right on the nav's and grow out of it
+  const host = document.querySelector('.device')
+  if (!host) return null
+  return createPortal(
+    <Sheet open={open} onClose={close} height="full" dim className="search-sheet" from={from} keep
       header={
         <form className="search-field" onSubmit={e => { e.preventDefault(); commit(); input.current?.blur() }}>
           <Icon name="search" size={18} />
@@ -122,6 +128,7 @@ export default function Search() {
           ))}</>)}
         </div>
       )}
-    </Sheet>
+    </Sheet>,
+    host,
   )
 }

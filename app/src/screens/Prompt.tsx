@@ -28,7 +28,7 @@ export default function PromptScreen({ id }: { active: boolean; id?: string }) {
   if (!c) return null
   const stickers = [STICKERS[1], STICKERS[6]]
   return (
-    <div className="soc-screen dots">
+    <div className="soc-screen plain">
       <div className="soc-scroll" onScroll={e => setScrollY((e.target as HTMLElement).scrollTop)}>
         <div className="soc-topline">
           <button className="soc-back" onClick={back} aria-label="Back"><Icon name="arrowLeft" /></button>

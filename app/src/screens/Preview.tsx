@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { trackById } from '../lib/assets'
 import { luminance } from '../lib/compose'
 import { haptic, sfx } from '../lib/feedback'
@@ -8,7 +9,7 @@ import { useThumb } from '../lib/thumbs'
 import type { ZineDoc } from '../lib/types'
 import type { ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
-import { Avatar, Button, fmtCount, IconBtn, PillGroup, Sheet, timeAgo } from '../ui/kit'
+import { Avatar, Button, fmtCount, Grabber, IconBtn, PillGroup, Sheet, timeAgo } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
 import './reading.css'
 
@@ -72,7 +73,7 @@ export function MusicTile({ trackId, onOpen }: { trackId?: string; onOpen: () =>
   )
 }
 
-/** The album cover, big, over a dithered screen. */
+/** The album cover, big, over a dithered screen. It sits on the device so the screen under it can take the dither. */
 export function AlbumPopup({ trackId, open, onClose }: { trackId?: string; open: boolean; onClose: () => void }) {
   const st = useMusicState()
   const t = trackById(trackId)
@@ -82,9 +83,10 @@ export function AlbumPopup({ trackId, open, onClose }: { trackId?: string; open:
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [open, onClose])
-  if (!t || !trackId) return null
+  const host = document.querySelector('.device')
+  if (!t || !trackId || !host) return null
   const playing = st.playing && st.track === trackId
-  return (
+  return createPortal(
     <div className={`album-pop ${open ? 'on' : ''}`} onClick={onClose} role="dialog" aria-modal aria-hidden={!open} aria-label={`${t.album.title} by ${t.album.artist}`}>
       <div className="ap-dither" aria-hidden />
       <div className="ap-card" onClick={e => e.stopPropagation()}>
@@ -94,19 +96,9 @@ export function AlbumPopup({ trackId, open, onClose }: { trackId?: string; open:
           onClick={() => { haptic('tick'); music.toggle(trackId) }} />
         <div className="ap-meta"><b>{t.track.title}</b><small>{t.album.artist}</small></div>
       </div>
-    </div>
+    </div>,
+    host,
   )
-}
-
-/** The heart sticker that slaps onto a liked zine. Fresh = play the slap. */
-export function HeartSticker({ box, fresh, src = '/assets/stickers/glitter-heart.webp', at = [0.82, 0.24] }: {
-  box: Box | null; fresh: number; src?: string; at?: [number, number]
-}) {
-  if (!box) return null
-  const w = box.x1 - box.x0, h = box.y1 - box.y0
-  const size = Math.max(34, Math.min(70, w * 0.2))
-  const style: CSSProperties = { left: box.x0 + w * at[0], top: box.y0 + h * at[1], width: size }
-  return <img key={fresh} className={`heart-sticker ${fresh ? 'slap' : ''}`} src={src} alt="" style={style} draggable={false} />
 }
 
 /** Re-express a stage-relative box in another element's coordinates. */
@@ -115,6 +107,26 @@ export function offsetBox(b: Box | null, from: HTMLElement | null, to: HTMLEleme
   const a = from.getBoundingClientRect(), c = to.getBoundingClientRect()
   const dx = a.left - c.left, dy = a.top - c.top
   return { x0: b.x0 + dx, y0: b.y0 + dy, x1: b.x1 + dx, y1: b.y1 + dy }
+}
+
+/**
+ * The stage transform that sets the zine, as the scene draws it now, exactly over a feed card (its centre,
+ * width and tilt). The stage scales about its centre. Used to lift the zine out of the card and put it back.
+ */
+function onCard(el: HTMLElement, scene: ZineScene, card: HTMLElement | null, from: DOMRect | null | undefined) {
+  const zb = zineScreenBox(scene)
+  const cr = card?.getBoundingClientRect() ?? from
+  if (!zb || !cr) return null
+  const r = el.getBoundingClientRect(), cv = scene.canvas.getBoundingClientRect()
+  const w = card ? (card.querySelector('img') ?? card).offsetWidth : cr.width
+  const s = w / Math.max(1, zb.x1 - zb.x0)
+  const tilt = card ? parseFloat(card.style.getPropertyValue('--tilt')) || 0 : 0
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2
+  const vx = (cv.left + (zb.x0 + zb.x1) / 2 - cx) * s, vy = (cv.top + (zb.y0 + zb.y1) / 2 - cy) * s
+  const a = (tilt * Math.PI) / 180
+  const tx = cr.left + cr.width / 2 - cx - (vx * Math.cos(a) - vy * Math.sin(a))
+  const ty = cr.top + cr.height / 2 - cy - (vx * Math.sin(a) + vy * Math.cos(a))
+  return `translate(${tx}px, ${ty}px) rotate(${tilt}deg) scale(${s})`
 }
 
 const exporters = import.meta.glob('../create/export.ts') as Record<string, () => Promise<{ exportZine: (d: ZineDoc, k: 'pdf-pages' | 'pdf-print' | 'video' | 'gif') => Promise<void> }>>
@@ -202,7 +214,7 @@ function PullTab({ doc }: { doc: ZineDoc }) {
     <>
       <div className={`pull-dim ${open ? 'on' : ''}`} onClick={() => setOpen(false)} />
       <section className={`pull-tab ${open ? 'open' : ''}`} style={drag ? { transform: `translateY(calc(var(--pt-y) + ${drag}px))`, transition: 'none' } : undefined}>
-        <div className="pt-grab" {...grab} role="button" aria-label={open ? 'Close comments' : 'Open comments, replies and details'}><span /></div>
+        <Grabber {...grab} label={open ? 'Close comments' : 'Open comments, replies and details'} />
         <div className="pt-tabs" role="tablist">
           {(['comments', 'replies', 'details'] as const).map(t => (
             <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => { setTab(t); setOpen(true) }}>
@@ -270,7 +282,6 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
   const communities = useApp(s => s.communities)
   const { go, back, toggleLike, toggleSave, toggleFollow, showToast, markDownloaded } = useApp.getState()
   const [scene, setScene] = useState<ZineScene | null>(null)
-  const [slap, setSlap] = useState(0)
   const [noteOk, setNoteOk] = useState(false)
   const [sheet, setSheet] = useState<'download' | 'more' | null>(null)
   const [album, setAlbum] = useState(false)
@@ -284,81 +295,87 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
   const author = users.find(u => u.id === doc?.author)
   const comm = communities.find(c => c.id === doc?.publish.postTo)
 
-  // lift: start where the card was and spring to centre
-  useLayoutEffect(() => {
+  // open: the zine lifts out of its card, leaving the card's slot empty, and grows to its place here
+  const card = useRef<HTMLElement | null>(null)
+  const lifted = useRef(false)
+  useLayoutEffect(() => { if (from && stage.current) stage.current.style.opacity = '0' }, [from])
+  useEffect(() => {
     const el = stage.current
-    if (!el || !from) return
-    const host = root.current!.getBoundingClientRect()
-    const r = el.getBoundingClientRect()
-    const zw = Math.min(r.width * 0.62, r.height * 0.62 * 0.68)
-    const s = from.width / zw
-    const dx = from.left + from.width / 2 - (r.left + r.width / 2)
-    const dy = from.top + from.height / 2 - (r.top + r.height / 2)
-    void host
-    el.style.transition = 'none'
-    el.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`
-    el.getBoundingClientRect()
-    requestAnimationFrame(() => {
-      el.style.transition = 'transform 520ms cubic-bezier(0.34, 1.32, 0.64, 1)'
-      el.style.transform = ''
-    })
-  }, [from])
+    if (!el || !scene || lifted.current) return
+    lifted.current = true
+    el.style.opacity = ''
+    if (!from) return
+    // the zine can be on more than one page of home: take the card it was opened from
+    const cards = [...document.querySelectorAll<HTMLElement>(`.layer.under .zcard[data-zine="${CSS.escape(id)}"]`)]
+    const at = (el: HTMLElement) => { const b = el.getBoundingClientRect(); return Math.hypot(b.left + b.width / 2 - (from.left + from.width / 2), b.top + b.height / 2 - (from.top + from.height / 2)) }
+    card.current = cards.sort((a, b) => at(a) - at(b))[0] ?? null
+    scene.renderOnce()
+    const t = onCard(el, scene, card.current, from)
+    card.current?.classList.add('pv-hole')
+    if (t) el.animate([{ transform: t }, { transform: 'none' }], { duration: 520, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
+  }, [scene, from, id])
+  // the card comes back the moment this screen is gone, which is when the zine has landed in its slot
+  useEffect(() => () => card.current?.classList.remove('pv-hole'), [])
 
   const like = useCallback(() => {
     const on = toggleLike(id)
-    if (on) { setSlap(Date.now()); sfx('slap'); haptic('double') } else haptic('tick')
+    if (on) { sfx('pop'); haptic('double') } else haptic('tick')
   }, [id, toggleLike])
+
+  // back: the zine flies back into its empty slot in the feed while the rest of the preview fades (App keeps
+  // this screen mounted while it leaves) and the feed's covers un-dither (reading.css)
+  const close = useCallback(() => {
+    const el = stage.current
+    const t = el && scene && card.current ? onCard(el, scene, card.current, null) : null
+    if (el && t) el.animate([{ transform: 'none' }, { transform: t }], { duration: 480, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' })
+    else el?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease', fill: 'forwards' })
+    haptic('tick')
+    back()
+  }, [scene, back])
 
   const onScene = useCallback((s: ZineScene | null) => {
     setScene(s)
     if (!s || !doc) return
     const kf = doc.keyframes[doc.publish.coverKeyframe] ?? doc.keyframes[0]
     if (kf) s.setAngles(kf.angles, { animate: false })
-    s.handlers = {
-      doubleTap: () => {
-        if (!useApp.getState().likes.includes(id)) like()
-        else { setSlap(Date.now()); sfx('slap'); haptic('tap') }
-        return true
-      },
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id])
 
-  // a tap on the zine opens it to read; wait out the double-tap window so double-tap still likes
+  // one tap turns the zine over, two open it to read (so a tap waits out the double-tap window), and a drag
+  // or swipe only tilts it (ZineScene preview mode); liking is the heart up top
   const gatedNow = !!doc?.publish.contentNote && !noteOk
   useEffect(() => {
     if (!scene) return
     scene.handlers.tap = p => {
       if (gatedNow || !scene.pick(p.x, p.y)) return
       clearTimeout(tapTimer.current)
-      tapTimer.current = window.setTimeout(() => { haptic('tap'); go({ name: 'read', id }) }, 320)
+      tapTimer.current = window.setTimeout(() => { haptic('tap'); scene.flip() }, 300)
     }
     scene.handlers.doubleTap = () => {
       clearTimeout(tapTimer.current)
-      if (!useApp.getState().likes.includes(id)) like(); else { setSlap(Date.now()); sfx('slap') }
+      if (gatedNow) return true
+      haptic('tap')
+      go({ name: 'read', id })
       return true
     }
-  }, [scene, like, id, go, gatedNow])
+  }, [scene, id, go, gatedNow])
   useEffect(() => () => clearTimeout(tapTimer.current), [])
 
   if (!doc) {
-    return <div className="screen dots"><div className="top-bar"><PillGroup className="solo"><IconBtn name="back" label="Back" onClick={back} /></PillGroup></div><p className="pt-empty" style={{ marginTop: 140 }}>This zine was folded away.</p></div>
+    return <div className="screen"><div className="top-bar"><PillGroup className="solo"><IconBtn name="back" label="Back" onClick={back} /></PillGroup></div><p className="pt-empty" style={{ marginTop: 140 }}>This zine was folded away.</p></div>
   }
 
   const save = () => {
     const on = toggleSave(id)
-    if (on) { flyToShelf(thumb, offsetBox(box, stage.current, root.current), root.current); haptic('tap'); sfx('rustle'); setTimeout(() => showToast('Saved to your shelf.', { label: 'View', run: () => go({ name: 'profile' }) }), 380) }
+    if (on) { flyToShelf(thumb, offsetBox(box, stage.current, root.current), root.current); haptic('tap'); sfx('rustle'); setTimeout(() => showToast('Saved to your shelf.', { label: 'View', run: () => useApp.getState().tab('profile') }), 380) }
     else { haptic('tick'); showToast('Removed from your shelf') }
   }
   const gated = !!doc.publish.contentNote && !noteOk
 
   return (
     <div className="screen preview" ref={root}>
-      <div className="pv-backdrop" aria-hidden />
-      <div className="pv-dither" aria-hidden />
-
       <div className="top-bar">
-        <PillGroup className="solo"><IconBtn name="back" label="Back" onClick={back} /></PillGroup>
+        <PillGroup className="solo"><IconBtn name="back" label="Back" onClick={close} /></PillGroup>
         <PillGroup>
           <IconBtn name="heart" label={liked ? 'Unlike' : 'Like'} onClick={like} className={liked ? 'liked' : ''} />
           <IconBtn name="bookmark" label={saved ? 'Remove from shelf' : 'Save to shelf'} onClick={save} className={saved ? 'saved' : ''} />
@@ -371,7 +388,6 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
 
       <div className="pv-stage" ref={stage}>
         <ZineView doc={doc} mode="preview" handles={false} keepAngles={false} onScene={onScene} className={gated ? 'gated' : ''} />
-        {liked && <HeartSticker box={box} fresh={slap} />}
       </div>
 
       {gated && (
@@ -383,7 +399,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
         </div>
       )}
 
-      <div className="pv-hint">tap to read · swipe to turn it over · double-tap to like</div>
+      <div className="pv-hint">tap to turn it over · double-tap to read · drag to tilt</div>
 
       <div className="pv-info">
         <div className="pv-maker">
@@ -398,11 +414,6 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
           )}
         </div>
         {comm && <div className="pv-comm">community <button onClick={() => go({ name: 'community', id: comm.id })} style={{ color: comm.color === '#1A1A1A' || luminance(comm.color) > 0.7 ? 'var(--accent)' : comm.color }}>#{comm.tag}</button></div>}
-        <div className="pv-actions">
-          <button className="pv-act" onClick={() => go({ name: 'create', replyTo: doc.id })} aria-label="Reply with a zine"><Icon name="reply" size={19} /><span>Reply</span></button>
-          <button className="pv-act" onClick={() => setSheet('download')} aria-label="Download"><Icon name="download" size={19} /><span>Save offline</span></button>
-          <Button kind="primary" className="pv-read" onClick={() => { haptic('tap'); go({ name: 'read', id: doc.id }) }} disabled={gated}>Read</Button>
-        </div>
       </div>
 
       <PullTab doc={doc} />
@@ -419,8 +430,10 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
       </Sheet>
       <Sheet open={sheet === 'more'} onClose={() => setSheet(null)} dim>
         <div className="menu-list">
-          <button onClick={() => { setSheet(null); copyLink(doc) }}><Icon name="link" /><span><b>Copy link</b></span></button>
+          {!gated && <button onClick={() => { setSheet(null); haptic('tap'); go({ name: 'read', id: doc.id }) }}><Icon name="book" /><span><b>Read</b><small>Open it up and unfold it page by page</small></span></button>}
           <button onClick={() => { setSheet(null); go({ name: 'create', replyTo: doc.id }) }}><Icon name="reply" /><span><b>Reply with a zine</b></span></button>
+          <button onClick={() => setSheet('download')}><Icon name="download" /><span><b>Save offline</b><small>Offline copy, PDF, video or GIF</small></span></button>
+          <button onClick={() => { setSheet(null); copyLink(doc) }}><Icon name="link" /><span><b>Copy link</b></span></button>
           {author && <button onClick={() => { setSheet(null); go({ name: 'profile', id: author.id }) }}><Icon name="user" /><span><b>More from {author.name}</b></span></button>}
           <button className="danger" onClick={() => { setSheet(null); showToast('Reported. Thanks for keeping Zeen kind.') }}><Icon name="flag" /><span><b>Report</b></span></button>
         </div>

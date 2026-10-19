@@ -4,41 +4,17 @@
 .step-ui > * { pointer-events: auto; }
 .step-ui .line-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 
-/* stepper */
-.stepper {
-  position: absolute;
-  top: calc(var(--safe-top) + 58px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 21;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 4px;
-  height: 22px;
-}
-.stepper .st { height: 22px; width: 26px; display: grid; place-items: center; }
-.stepper .st:disabled { cursor: default; }
-.st-bar { width: 22px; height: 3px; border-radius: 2px; background: #D9D9D9; transition: background var(--t-med), width var(--t-med) var(--ease-out); }
-.st.done .st-bar { background: var(--ink-2); }
-.st.on .st-bar { background: var(--accent); width: 26px; }
-.st-label {
-  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-  font-size: 11px; color: var(--mute); white-space: nowrap; letter-spacing: 0.02em;
-  animation: fade-up var(--t-med) var(--ease-out) both;
-}
-.step-start .stepper { display: none; }
-
 /* rails */
 .rail { position: absolute; z-index: 15; display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .rail.right { right: 14px; top: calc(var(--safe-top) + 100px); }
 .rail.left { left: 14px; top: calc(var(--safe-top) + 100px); }
 .rail-btn { border-radius: 13px; }
 
-/* bottom */
+/* bottom: rulers, strips and hints; the toolbar docks on its own (below) and the stack makes room for it */
 .bottom-stack {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 0 12px calc(var(--safe-bottom) + 12px);
+  transition: padding-bottom var(--t-med) var(--ease-out);
   display: flex; flex-direction: column; gap: calc(6.2 * var(--u));
   z-index: 15;
   pointer-events: none;
@@ -46,11 +22,45 @@
 .bottom-stack > * { pointer-events: auto; }
 .bottom-stack .hint-text { pointer-events: none; margin-bottom: 4px; animation: fade-up var(--t-med) var(--ease-out) both; }
 
-/* Bottom toolbars (Trays.tsx) are SVGs in the Figma export's units; --u (index.css) scales them. */
-.tray { display: block; flex: none; align-self: center; height: auto; overflow: visible; }
+/* Toolbars (Trays.tsx) are SVGs in the Figma export's units; --u (index.css) scales them. */
+.tray { display: block; width: 100%; height: 100%; overflow: visible; }
 .tray-cell { cursor: pointer; outline: none; }
 .tray-cell .tray-glyph { transform-box: fill-box; transform-origin: center; transition: transform var(--t-fast) var(--ease-spring); }
 .tray-cell:active .tray-glyph { transform: scale(0.88); }
+.tray-upright { transform-box: fill-box; transform-origin: center; transform: var(--upright, rotate(0deg)); transition: transform 460ms var(--ease-spring); }
+.tray-grip { cursor: grab; touch-action: none; }
+.dragging .tray-grip { cursor: grabbing; }
+
+/* Docking. The box is centred on (left, top); the bar's top always faces the middle of the screen. */
+.tray-dock, .dock-slot {
+  position: absolute; z-index: 16;
+  width: calc(var(--tw) * var(--u)); height: calc(53 * var(--u));
+  margin: calc(-26.5 * var(--u)) 0 0 calc(var(--tw) * var(--u) / -2);
+  left: 50%; top: calc(100% - var(--safe-bottom) - 12px - 26.5 * var(--u));
+  rotate: 0deg; scale: 1 1;
+}
+.tray-dock[data-dock="top"], .dock-slot[data-dock="top"] { top: calc(var(--safe-top) + 58px + 26.5 * var(--u)); scale: 1 -1; --upright: scale(1, -1); }
+.tray-dock[data-dock="left"], .dock-slot[data-dock="left"] { left: calc(6px + 26.5 * var(--u)); top: 50%; rotate: 90deg; --upright: rotate(-90deg); }
+.tray-dock[data-dock="right"], .dock-slot[data-dock="right"] { left: calc(100% - 6px - 26.5 * var(--u)); top: 50%; rotate: 90deg; scale: 1 -1; --upright: scale(1, -1) rotate(-90deg); }
+.tray-dock[data-dock="left"] .tray-label, .tray-dock[data-dock="right"] .tray-label { display: none; }
+.tray-dock.dragging { z-index: 32; }
+.tray-dock.dragging .tray { filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.16)); }
+/* where the bar will land while it's dragged */
+.dock-slot { pointer-events: none; z-index: 15; transition: left 300ms var(--ease-spring), top 300ms var(--ease-spring), rotate 300ms var(--ease-spring); animation: fade-in var(--t-fast) ease both; }
+.dock-slot::before {
+  content: ''; position: absolute;
+  inset: calc(2.44 * var(--u)) calc(3.58 * var(--u)) calc(4.56 * var(--u)) calc(3.42 * var(--u));
+  border-radius: calc(12.7 * var(--u));
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+
+/* make room for the toolbar where it's docked */
+.create[data-dock="bottom"] .bottom-stack { padding-bottom: calc(var(--safe-bottom) + 12px + 59.2 * var(--u)); }
+.create[data-dock="top"] .rail { top: calc(var(--safe-top) + 72px + 53 * var(--u)); }
+.create[data-dock="top"] .orient-chip { top: calc(var(--safe-top) + 64px + 53 * var(--u)); }
+.create[data-dock="right"] .rail.right { right: auto; left: 14px; }
 .tray-cell:focus-visible > rect { stroke: rgba(0, 0, 0, 0.2); stroke-width: 1; }
 .tray-art { transition: transform var(--t-med) var(--ease-spring); }
 .tray-art.lifted { transform: translateY(-9px); }
@@ -159,6 +169,12 @@ textarea.text-input { height: auto; min-height: 88px; padding: 12px 14px; resize
 .sw { width: 36px; height: 36px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); position: relative; transition: transform var(--t-fast) var(--ease-spring); background-size: cover; background-position: center; }
 .sw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--ink); }
 .sw:active { transform: scale(0.88); }
+/* custom colour: a colour wheel, hues round the rim (red at the top) fading to white in the middle */
+.sw.spectrum, .spectrum-sw {
+  background:
+    radial-gradient(circle closest-side, #fff 0%, rgba(255, 255, 255, 0.75) 22%, rgba(255, 255, 255, 0) 80%),
+    conic-gradient(#f00, #ff8000, #ff0, #80ff00, #0f0, #00ff80, #0ff, #0080ff, #00f, #8000ff, #f0f, #ff0080, #f00);
+}
 .sw.spectrum input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .sw.plus { display: grid; place-items: center; background: #fff; color: var(--ink); }
 .start-actions { display: flex; gap: 10px; margin-top: 18px; align-items: center; }

@@ -6,6 +6,8 @@ import type { Comment, Community, Post, ScrapItem, User, ZineDoc } from './types
 
 // ---------------------------------------------------------------- navigation
 
+export type HomePage = 'discover' | 'following' | 'profile'
+
 export type Route =
   | { name: 'home'; tab?: 'discover' | 'following' }
   | { name: 'preview'; id: string; from?: DOMRect | null }
@@ -50,11 +52,18 @@ interface AppState extends Persisted {
   scrapbook: ScrapItem[]
   toast: { id: number; text: string; action?: { label: string; run: () => void } } | null
   searchOpen: boolean
+  /** where the home search field sits (client px, its top edge): the search sheet's field grows out of it */
+  searchFrom: number | null
+  /** home is a row of pages you swipe between: the two feeds, then your own profile */
+  homePage: HomePage
+  /** the feed home returns to from the profile tab */
+  homeFeed: 'discover' | 'following'
   init(): Promise<void>
   go(r: Route): void
   replace(r: Route): void
   back(): void
   tab(name: 'home' | 'create' | 'profile'): void
+  setHomePage(p: HomePage): void
   showToast(text: string, action?: { label: string; run: () => void }, ms?: number): void
   saveZine(z: ZineDoc): void
   deleteZine(id: string): void
@@ -72,7 +81,7 @@ interface AppState extends Persisted {
   setReadProgress(id: string, kf: number): void
   updateMe(p: Partial<User>): void
   addScraps(items: ScrapItem[]): void
-  setSearchOpen(o: boolean): void
+  setSearchOpen(o: boolean, from?: number): void
   addRecentSearch(q: string): void
   markSeen(key: string): void
   setSeenIntro(): void
@@ -144,6 +153,9 @@ export const useApp = create<AppState>((setS, getS) => ({
   scrapbook: [],
   toast: null,
   searchOpen: false,
+  searchFrom: null,
+  homePage: 'discover',
+  homeFeed: 'discover',
 
   async init() {
     const samples = sampleZines()
@@ -167,11 +179,14 @@ export const useApp = create<AppState>((setS, getS) => ({
   back() { setS(s => (s.stack.length > 1 ? { stack: s.stack.slice(0, -1), dir: -1 } : s)) },
   tab(name) {
     setS(s => {
-      if (name === 'home') return { stack: [{ name: 'home' }], dir: -1 }
-      if (name === 'profile') return { stack: [{ name: 'home' }, { name: 'profile' }], dir: 1 }
+      // both tabs are pages of home: switching them only moves home's pager (and closes whatever is on top)
+      if (name === 'home') return { stack: [{ name: 'home' }], dir: -1, homePage: s.homePage === 'profile' ? s.homeFeed : s.homePage }
+      if (name === 'profile') return { stack: [{ name: 'home' }], dir: -1, homePage: 'profile' }
       return { stack: [...s.stack, { name: 'create' }], dir: 1 }
     })
   },
+
+  setHomePage(p) { setS(s => ({ homePage: p, homeFeed: p === 'profile' ? s.homeFeed : p })) },
 
   showToast(text, action, ms = 2600) {
     const id = Date.now()
@@ -269,7 +284,7 @@ export const useApp = create<AppState>((setS, getS) => ({
       await set(IDB_SCRAPS, mine)
     } catch { /* ignore */ }
   },
-  setSearchOpen(o) { setS({ searchOpen: o }) },
+  setSearchOpen(o, from) { setS(s => ({ searchOpen: o, searchFrom: from ?? s.searchFrom })) },
   addRecentSearch(q) {
     if (!q.trim()) return
     setS(s => ({ recentSearches: [q, ...s.recentSearches.filter(x => x !== q)].slice(0, 8) }))

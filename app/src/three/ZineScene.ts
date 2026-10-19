@@ -17,6 +17,8 @@ import { FEELS, Spring } from './spring'
 
 export type CameraMode = 'free' | 'page' | 'preview' | 'static'
 
+export interface CreaseMark { panel: string; a: Vec2; b: Vec2; color: string; width: number; opacity?: number; dash?: [number, number] }
+
 export interface PointerInfo { x: number; y: number; id: number; t: number; button?: number }
 export interface TwoInfo { cx: number; cy: number; dist: number; angle: number; dx: number; dy: number; scale: number; rot: number }
 
@@ -82,6 +84,13 @@ export class ZineScene {
   oneFingerSwipe = true
   /** in free mode, a one-finger drag the tool doesn't claim orbits the camera (Cut & Fold with no tool) */
   dragOrbit = false
+  /**
+   * in page mode, one finger drags the zine around the screen (with a little glide when let go) and two
+   * fingers pinch and pan; nothing a drag does turns it over (the reader leaves that to double-tap)
+   */
+  dragPan = false
+  private panVel = new Vector2()
+  private panAt = 0
   private hintPending = false
   /** called with the visible side whenever the zine turns over */
   side: Side = 'front'
@@ -117,6 +126,7 @@ export class ZineScene {
   private disposed = false
   private tintMesh: Mesh | null = null
   private ghostMesh: Mesh | null = null
+  private creaseMarks: Mesh[] = []
   private drops: { mesh: Mesh; v: Vector3; spin: Vector3; t: number }[] = []
   private hidden = new Set<string>()
 
@@ -613,6 +623,10 @@ export class ZineScene {
       this.dirtyTex.clear()
       this.updateFx()
     }
+    if (!this.pointers.size && this.panVel.lengthSq() > 1e-4) {
+      this.panBy(this.panVel.x * dt, this.panVel.y * dt)
+      this.panVel.multiplyScalar(Math.exp(-dt * 6))
+    }
     this.stepDrops(dt)
     this.renderer.render(this.scene, this.camera)
     this.positionHandles()
@@ -628,6 +642,11 @@ export class ZineScene {
   private rimBack = new Matrix4().makeTranslation(0, 0, -0.012)
   private rimFront = new Matrix4().makeTranslation(0, 0, 0.012)
   private syncMeshMatrices() {
+    for (const mk of this.creaseMarks) {
+      const pm = this.mats.get(mk.userData.panel)
+      if (pm) mk.matrix.copy(pm).multiply(mk.userData.local)
+      mk.visible = !!pm
+    }
     for (const [id, m] of this.meshes) {
       const mat = this.mats.get(id)
       if (!mat) continue
@@ -785,15 +804,41 @@ export class ZineScene {
     this.tintMesh = mesh
   }
 
+  /**
+   * Crease lines drawn on the paper itself, on both faces of the panel that holds them, so they
+   * follow every fold and hide behind flaps like real marks. `width` and `dash` are in cm.
+   */
+  setCreaseMarks(marks: CreaseMark[], seeThrough = false) {
+    for (const m of this.creaseMarks) { m.geometry.dispose(); (m.material as MeshBasicMaterial).dispose(); m.removeFromParent() }
+    this.creaseMarks = []
+    for (const k of marks) {
+      if (!this.d?.panels.has(k.panel)) continue
+      const geo = strokeGeometry(k.a, k.b, k.width, k.dash)
+      for (const z of [0.014, -0.014]) {
+        const mat = new MeshBasicMaterial({
+          color: k.color, transparent: true, opacity: k.opacity ?? 1, side: DoubleSide, depthWrite: false, depthTest: !seeThrough,
+          polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
+        })
+        const mesh = new Mesh(geo, mat)
+        mesh.matrixAutoUpdate = false
+        mesh.userData = { panel: k.panel, local: new Matrix4().makeTranslation(0, 0, z) }
+        mesh.renderOrder = 7
+        this.root.add(mesh)
+        this.creaseMarks.push(mesh)
+      }
+    }
+    this.syncMeshMatrices()
+  }
+
   /** Translucent preview of a flap folded about a not-yet-created crease. */
-  setGhost(panel: string | null, region: MultiPoly | null, crease: Crease | null, color = '#5C5CE3') {
+  setGhost(panel: string | null, region: MultiPoly | null, crease: Crease | null, color = '#5C5CE3', opacity = 0.32) {
     if (this.ghostMesh) { this.ghostMesh.geometry.dispose(); (this.ghostMesh.material as MeshBasicMaterial).dispose(); this.ghostMesh.removeFromParent(); this.ghostMesh = null }
     if (!panel || !region?.length || !crease) return
     const P = this.d.panels.get(panel)
     const s = P && this.d.surfaces.get(P.surface)
     if (!s) return
     const geo = regionGeometry(region, s.frame, false)
-    const mesh = new Mesh(geo, new MeshBasicMaterial({ color, transparent: true, opacity: 0.32, side: DoubleSide, depthWrite: false }))
+    const mesh = new Mesh(geo, new MeshBasicMaterial({ color, transparent: true, opacity, side: DoubleSide, depthWrite: false }))
     mesh.matrixAutoUpdate = false
     mesh.userData = { panel, local: hingeMatrix(crease, crease.angle, 2) }
     mesh.renderOrder = 6
@@ -1070,7 +1115,7 @@ export class ZineScene {
   // ---------------------------------------------------------------- input
 
   private pointers = new Map<number, { x: number; y: number; x0: number; y0: number; t0: number }>()
-  private gesture: 'none' | 'tool' | 'two' | 'cam1' | 'swipe' = 'none'
+  private gesture: 'none' | 'tool' | 'two' | 'cam1' | 'swipe' | 'pan' = 'none'
   private two: { cx: number; cy: number; dist: number; angle: number; c0x: number; c0y: number; d0: number; a0: number; claimed: boolean; flipped: boolean; t0: number; maxMove: number; count: number } | null = null
   private lastTap = { t: 0, x: 0, y: 0 }
   private tapCandidate = false
@@ -1124,7 +1169,8 @@ export class ZineScene {
       } else if (mouseOrbit || this.handMode || this.mode === 'preview' || (this.mode === 'free' && this.dragOrbit)) {
         this.gesture = 'cam1'
       } else {
-        this.gesture = this.mode === 'page' && this.oneFingerSwipe ? 'swipe' : 'none'
+        this.gesture = this.mode === 'page' && this.dragPan ? 'pan' : this.mode === 'page' && this.oneFingerSwipe ? 'swipe' : 'none'
+        this.panVel.set(0, 0); this.panAt = performance.now()
       }
       this.tapCandidate = true
     } else if (n === 2) {
@@ -1159,10 +1205,18 @@ export class ZineScene {
     if (this.gesture === 'tool') { this.handlers.toolMove?.(this.info(e.pointerId, x, y)); return }
     if (this.gesture === 'cam1') {
       if (this.mode === 'preview') {
+        // a drag or swipe only angles the zine (it springs back on release); turning over is a tap
         this.tiltY.set(clamp(this.tiltY.x + pdx * 0.006, -0.7, 0.7))
         this.tiltX.set(clamp(this.tiltX.x + pdy * 0.004, -0.4, 0.4))
-        if (Math.abs(this.tiltY.x) > 0.62) { this.tiltY.set(0); this.flip(); this.gesture = 'none' }
       } else this.orbit(pdx, pdy)
+      return
+    }
+    if (this.gesture === 'pan') {
+      const now = performance.now(), dt = Math.max(1, now - this.panAt) / 1000
+      this.panAt = now
+      const k = this.dist * Math.tan((FOV * Math.PI) / 360) * 2 / this.h
+      this.panBy(pdx * k, -pdy * k)
+      this.panVel.set(this.panVel.x * 0.6 + (pdx * k / dt) * 0.4, this.panVel.y * 0.6 + (-pdy * k / dt) * 0.4)
       return
     }
     if (this.gesture === 'swipe') {
@@ -1188,7 +1242,10 @@ export class ZineScene {
       } else {
         this.setZoom(this.zoomStart * (dist / this.two.d0))
         const tdx = cx - this.two.c0x, tdy = cy - this.two.c0y
-        if (!this.two.flipped && this.zoom < 1.15 && Math.abs(tdx) > 60 && Math.abs(tdx) > Math.abs(tdy) * 1.5 && Math.abs(dist / this.two.d0 - 1) < 0.25) {
+        if (this.dragPan) {
+          const k = this.dist * Math.tan((FOV * Math.PI) / 360) * 2 / this.h
+          this.panBy(dcx * k, -dcy * k)
+        } else if (this.mode !== 'preview' && !this.two.flipped && this.zoom < 1.15 && Math.abs(tdx) > 60 && Math.abs(tdx) > Math.abs(tdy) * 1.5 && Math.abs(dist / this.two.d0 - 1) < 0.25) {
           this.two.flipped = true
           this.flip()
         } else if (this.zoom >= 1.15) {
@@ -1215,6 +1272,7 @@ export class ZineScene {
       if (n < 2) {
         if (this.two?.claimed) this.handlers.twoEnd?.()
         else if (this.mode === 'free' && this.snapFaceOn && this.two && this.two.maxMove > 12) this.snapToNearest()
+        else if (this.dragPan) { if (this.zoom < 1) this.zoom = 1 }
         else if (this.mode !== 'free' && this.zoom < 1.05) { this.zoom = 1; this.pan.set(0, 0) }
         this.two = null
         this.gesture = n === 1 ? 'none' : 'none'
@@ -1222,6 +1280,8 @@ export class ZineScene {
       if (n === 0) this.finishMultiTap()
       return
     }
+    // a drag let go mid-motion keeps gliding briefly (loop); a still finger just stops
+    if (this.gesture === 'pan' && performance.now() - this.panAt > 80) this.panVel.set(0, 0)
     if (this.gesture === 'cam1') {
       if (this.mode === 'preview') { this.tiltX.to(0); this.tiltY.to(0) }
       else if (this.mode === 'free' && this.snapFaceOn && !this.handMode) this.snapToNearest()
@@ -1247,6 +1307,12 @@ export class ZineScene {
     if (!m || m.moved || performance.now() - m.t0 > 350) return
     if (m.count === 2) { this.handlers.undo?.(); haptic('tap') }
     else if (m.count >= 3) { this.handlers.redo?.(); haptic('tap') }
+  }
+
+  /** Move the zine by world units, keeping its middle on screen. */
+  private panBy(dx: number, dy: number) {
+    const hh = this.dist * Math.tan((FOV * Math.PI) / 360), hw = hh * this.camera.aspect
+    this.pan.set(clamp(this.pan.x + dx, -hw * 0.85, hw * 0.85), clamp(this.pan.y + dy, -hh * 0.85, hh * 0.85))
   }
 
   private onWheel(e: WheelEvent) {
@@ -1298,6 +1364,31 @@ function pointInRegion(p: Vec2, mp: MultiPoly) {
     if (inside) return true
   }
   return false
+}
+
+/** A flat strip from a to b, `width` wide, optionally broken into dashes [on, off]. */
+function strokeGeometry(a: Vec2, b: Vec2, width: number, dash?: [number, number]) {
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const L = Math.hypot(dx, dy) || 1
+  const ux = dx / L, uy = dy / L, nx = -uy * width / 2, ny = ux * width / 2
+  const runs: [number, number][] = []
+  if (dash) {
+    // centre the pattern so both ends get the same partial dash
+    const period = dash[0] + dash[1]
+    let t = ((L - dash[0]) / 2) % period - period
+    for (; t < L; t += period) { const t0 = Math.max(0, t), t1 = Math.min(L, t + dash[0]); if (t1 - t0 > 0.02) runs.push([t0, t1]) }
+  } else runs.push([0, L])
+  const pos = new Float32Array(runs.length * 18)
+  runs.forEach(([t0, t1], i) => {
+    const p0x = a[0] + ux * t0, p0y = a[1] + uy * t0, p1x = a[0] + ux * t1, p1y = a[1] + uy * t1
+    pos.set([
+      p0x - nx, p0y - ny, 0, p1x - nx, p1y - ny, 0, p1x + nx, p1y + ny, 0,
+      p0x - nx, p0y - ny, 0, p1x + nx, p1y + ny, 0, p0x + nx, p0y + ny, 0,
+    ], i * 18)
+  })
+  const g = new BufferGeometry()
+  g.setAttribute('position', new BufferAttribute(pos, 3))
+  return g
 }
 
 /** Grow a region outward by w (for sticker outlines). */

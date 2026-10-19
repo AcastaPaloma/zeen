@@ -572,10 +572,11 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
             <label className="sw spectrum" aria-label="Custom colour"><input type="color" value={ink.color} onChange={e => ed.setInk({ color: e.target.value })} /></label>
           </div>
         )}
-        <CollageTray drawing={drawing} tool={ink.tool} onTool={startDraw}
-          onMore={() => setSheet('more')} onLayers={() => setSheet('layers')} onText={() => { haptic('tap'); setText({ open: true, initial: null }) }}
-          color={ink.color} onColor={() => setColorOpen(o => !o)} onBrush={() => setSheet('ink')} brushLabel={ink.boil ? 'boiling' : ink.tool} />
       </div>
+
+      <CollageTray drawing={drawing} tool={ink.tool} onTool={startDraw}
+        onMore={() => setSheet('more')} onLayers={() => setSheet('layers')} onText={() => { haptic('tap'); setText({ open: true, initial: null }) }}
+        color={ink.color} onColor={() => setColorOpen(o => !o)} onBrush={() => setSheet('ink')} brushLabel={ink.boil ? 'boiling' : ink.tool} />
 
       {spread && scene && (
         <SpreadView scene={scene} doc={doc} onClose={() => setSpread(false)}

@@ -28,7 +28,7 @@ export function KeyThumb({ doc, i, dither }: { doc: ZineDoc; i: number; dither?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, i])
   if (!url) return <span className="kt-ph" />
-  return dither ? <DitherImg src={url} color="#5E5E5E" size={64} scale={1} stretch /> : <img src={url} alt="" draggable={false} />
+  return dither ? <DitherImg src={url} size={[64, 52]} /> : <img src={url} alt="" draggable={false} />
 }
 
 export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, readOnly, dither }: {

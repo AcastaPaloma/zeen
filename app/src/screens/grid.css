@@ -5,10 +5,12 @@
   position: relative;
   width: 100%;
   transform: rotate(var(--tilt));
-  transition: transform var(--t-med) var(--ease-spring), filter var(--t-fast);
+  transition: transform var(--t-med) var(--ease-spring), filter var(--t-fast), opacity var(--t-med) ease;
   display: block;
 }
 .zcard:active { transform: rotate(var(--tilt)) scale(0.95); }
+/* while its zine is out in the preview, the card's slot stays empty (Preview) */
+.zcard.pv-hole { visibility: hidden; }
 .zcard img {
   width: 100%;
   display: block;

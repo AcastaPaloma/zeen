@@ -8,11 +8,12 @@ import { IconBtn, PillGroup } from '../ui/kit'
 import { objectAt, transformObject } from './collageUtil'
 import { useEditor } from './editor'
 
-/** The whole zine unfolded flat, front and back, with page numbers. Scraps and text can be moved here. */
+/** The zine's sheet unfolded flat, front and back, with page numbers. Scraps and text can be moved here. */
 export function SpreadView({ scene, doc, onClose, onJump, onMove }: {
   scene: ZineScene; doc: ZineDoc; onClose: () => void; onJump: (panel: string, side: Side) => void; onMove: (objects: ZObject[], label: string) => void
 }) {
-  const surfaces = doc.surfaces.filter(s => scene.d.surfaces.has(s.id))
+  // just the sheet itself: leaves hinged on afterwards aren't part of it laid flat
+  const surfaces = doc.surfaces.filter(s => scene.d.surfaces.has(s.id) && s.kind !== 'leaf')
   return (
     <div className="spread-view" role="dialog" aria-label="Spread view">
       <div className="top-bar">
@@ -84,19 +85,21 @@ function SpreadSide({ scene, doc, surface, side, onJump, onMove }: {
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke()
       }
       ctx.setLineDash([])
-      // page numbers
+      // page numbers, drawn in screen pixels so they stay crisp; each digit is centred on its own ink
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.font = '600 11px "DM Sans", sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'
       for (const P of scene.d.list) {
         if (P.surface !== surface.id || !P.region.length) continue
         const n = scene.pageOf(P.id, side)
         if (!n) continue
         const c0 = flatToPage(f, side, centroid(P.region))
-        const r = 0.55
+        const x = c0[0] * scale, y = c0[1] * scale
         ctx.fillStyle = 'rgba(26,26,26,0.82)'
-        ctx.beginPath(); ctx.arc(c0[0], c0[1], r, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill()
+        const m = ctx.measureText(String(n))
         ctx.fillStyle = '#fff'
-        ctx.font = `600 ${0.55}px DM Sans, sans-serif`
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-        ctx.fillText(String(n), c0[0], c0[1] + 0.02)
+        ctx.fillText(String(n), x, y + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2)
       }
     }
     draw()
@@ -110,7 +113,7 @@ function SpreadSide({ scene, doc, surface, side, onJump, onMove }: {
 
   return (
     <div className="sv-side">
-      <div className="sv-label">{surface.kind === 'leaf' ? 'Added page' : 'Sheet'} · {side === 'front' ? 'Front' : 'Back'}</div>
+      <div className="sv-label">Sheet · {side === 'front' ? 'Front' : 'Back'}</div>
       <canvas ref={ref} style={{ width: w, height: h, touchAction: 'none' }}
         onPointerDown={e => {
           ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)

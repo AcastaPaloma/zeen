@@ -6,7 +6,7 @@ import { useApp } from '../lib/store'
 import { renderThumb } from '../lib/thumbs'
 import type { Visibility, ZineDoc } from '../lib/types'
 import { Icon } from '../ui/Icon'
-import { Avatar, Button, Chip, IconBtn, PillGroup, Row, Segmented, Toggle } from '../ui/kit'
+import { Avatar, Button, Chip, Grabber, IconBtn, PillGroup, Row, Segmented, Toggle, usePanelDrag } from '../ui/kit'
 import type { StepProps } from './Create'
 import { useEditor } from './editor'
 import { exportZine, type Aspect, type ExportKind } from './export'
@@ -23,15 +23,21 @@ export default function Publish({ scene, doc, exit }: StepProps) {
   const [aspect, setAspect] = useState<Aspect>('9:16')
   const [busy, setBusy] = useState<{ kind: ExportKind; p: number } | null>(null)
   const [stamping, setStamping] = useState(false)
+  // the sheet drags between nearly full, its resting height and tucked away under the zine
+  const panel = usePanelDrag([0.12, 0.37, 0.8], 0.37)
 
-  // the zine sits small at the top, posed at its cover keyframe
+  // the zine sits in the space above the sheet, posed at its cover keyframe
   useEffect(() => {
     if (!scene) return
     const el = scene.el
     el.style.top = 'calc(var(--safe-top) + 84px)'
-    el.style.bottom = '63%'
+    el.style.bottom = `${Math.round((1 - panel.top) * 100)}%`
     scene.fitMargin = 1.25
     scene.resize()
+  }, [scene, panel.top])
+  useEffect(() => {
+    if (!scene) return
+    const el = scene.el
     return () => { el.style.top = ''; el.style.bottom = ''; scene.fitMargin = null; scene.resize() }
   }, [scene])
   useEffect(() => {
@@ -119,7 +125,8 @@ export default function Publish({ scene, doc, exit }: StepProps) {
         <button className="post-mini" disabled={!p.title.trim()} onClick={post}>Post</button>
       </div>
 
-      <section className="pub-sheet" aria-label="Publish">
+      <section className="pub-sheet" aria-label="Publish" data-panel style={panel.style}>
+        <Grabber {...panel.bind} label="Drag to resize the publish sheet" />
         <div className="pub-scroll scroll">
           <label className="field">
             <span className="field-head"><b>Title</b><small className={p.title.length > 54 ? 'warn' : ''}>{p.title.length}/60</small></span>

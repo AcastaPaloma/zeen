@@ -5,9 +5,8 @@ import { ME } from '../lib/samples'
 import { removeShelf, useApp, type Shelf } from '../lib/store'
 import { useThumb } from '../lib/thumbs'
 import type { User, ZineDoc } from '../lib/types'
-import { BottomNav } from '../ui/BottomNav'
 import { Icon, type IconName } from '../ui/Icon'
-import { Button, fmtCount, Sheet } from '../ui/kit'
+import { Button, fmtCount, Sheet, useSwipe } from '../ui/kit'
 import { openZine, SocTabs } from './Community'
 import { MessyGrid } from './ZineGrid'
 import './social.css'
@@ -200,7 +199,8 @@ function MenuItem({ icon, label, onClick, danger }: { icon: IconName; label: str
   return <button className={`menu-item ${danger ? 'danger' : ''}`} onClick={onClick}><Icon name={icon} size={20} /> {label}</button>
 }
 
-export default function Profile({ id }: { active: boolean; id?: string }) {
+/** A maker's profile. Your own lives as the last page of home's pager (`embedded`); others' open on top. */
+export default function Profile({ id, embedded = false }: { active: boolean; id?: string; embedded?: boolean }) {
   const meUser = useApp(s => s.me)
   const users = useApp(s => s.users)
   const zines = useApp(s => s.zines)
@@ -218,6 +218,18 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
   const [pinMode, setPinMode] = useState(false)
   const [scrollY, setScrollY] = useState(0)
   const [muted, setM] = useState(isMuted())
+  // the header pulls down to reveal the whole profile image, and pushes back up to tuck it away
+  const scroller = useRef<HTMLDivElement>(null)
+  const [hdrH, setHdrH] = useState<number | null>(null)
+  const hd = useRef<{ y0: number; h0: number; s0: number; y: number; t: number; v: number; moved: boolean; small: number; big: number } | null>(null)
+  const dragged = useRef(false)
+
+  // swipe right to leave a profile opened on top (home's pager handles the sideways drag for your own)
+  const swipe = useSwipe(dir => {
+    if (dir !== 'right' || embedded) return
+    haptic('tick')
+    back()
+  })
 
   const own = useMemo(() => Object.values(zines).filter(z => user && z.author === user.id && z.status === 'published')
     .sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)), [zines, user])
@@ -229,6 +241,44 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
   const isFollowing = following.includes(user.id)
   const followers = user.followers + (isFollowing && !isMe ? 1 : 0)
   const hdr = user.header || '#222'
+
+  const hdrBind = {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if ((e.target as Element).closest('.pf-corner')) return
+      const el = e.currentTarget
+      try { el.setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+      const safe = parseFloat(getComputedStyle(el).getPropertyValue('--safe-top')) || 0
+      hd.current = {
+        y0: e.clientY, h0: el.offsetHeight, s0: scroller.current?.scrollTop ?? 0, y: e.clientY, t: performance.now(), v: 0, moved: false,
+        small: 150 + safe, big: Math.min(window.innerHeight * 0.76, 640),
+      }
+      dragged.current = false
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const d = hd.current
+      if (!d) return
+      const now = performance.now()
+      d.v = d.v * 0.6 + ((e.clientY - d.y) / Math.max(1, now - d.t)) * 0.4
+      d.y = e.clientY; d.t = now
+      const dy = e.clientY - d.y0
+      if (!d.moved && Math.abs(dy) < 5) return
+      d.moved = true
+      dragged.current = true
+      // scrolled down, or pushing a closed header up: it's just the page scrolling
+      if (d.s0 > 0 || (!expanded && dy < 0)) { if (scroller.current) scroller.current.scrollTop = d.s0 - dy; return }
+      const h = d.h0 + dy
+      setHdrH(h > d.big ? d.big + Math.sqrt(h - d.big) * 4 : Math.max(d.small * 0.9, h))
+    },
+    onPointerUp: () => {
+      const d = hd.current
+      hd.current = null
+      if (!d || hdrH === null) { setHdrH(null); return }
+      const open = hdrH + d.v * 160 > (d.small + d.big) / 2
+      if (open !== expanded) haptic('tick')
+      setExpanded(open)
+      setHdrH(null)
+    },
+  }
 
   const onOpen = (z: ZineDoc, rect: DOMRect) => {
     if (pinMode) {
@@ -242,13 +292,16 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
 
   return (
     <div className="pf">
-      <div className="pf-scroll" onScroll={e => {
+      <div className="pf-scroll" ref={scroller} {...(embedded ? {} : swipe)} onScroll={e => {
         const y = (e.target as HTMLElement).scrollTop
         setScrollY(y)
         if (expanded && y > 60) setExpanded(false)
       }}>
-        <header className={`pf-header ${expanded ? 'expanded' : ''}`} style={{ '--hdr': isColor(hdr) ? hdr : '#222' } as CSSProperties}
-          onClick={() => { haptic('tick'); setExpanded(x => !x) }} aria-expanded={expanded} aria-label={`${user.name}'s profile header. Tap to ${expanded ? 'collapse' : 'expand'}`}>
+        <header className={`pf-header ${expanded ? 'expanded' : ''}`}
+          style={{ '--hdr': isColor(hdr) ? hdr : '#222', ...(hdrH !== null ? { height: hdrH, transition: 'none' } : {}) } as CSSProperties}
+          {...hdrBind}
+          onClick={() => { if (dragged.current) { dragged.current = false; return } haptic('tick'); setExpanded(x => !x) }}
+          aria-expanded={expanded} aria-label={`${user.name}'s profile header. Drag down or tap to ${expanded ? 'collapse' : 'expand'}`}>
           <HeaderBg header={hdr} />
           <HeaderStickers stickers={user.stickers} />
           <div className="pf-corner l" onClick={e => e.stopPropagation()}>
@@ -281,11 +334,6 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
             : <Button kind="dark" className={isFollowing ? 'following' : ''} icon={isFollowing ? 'check' : 'users'}
                 onClick={() => { toggleFollow(user.id); haptic('tap'); if (!isFollowing) sfx('pop') }}>{isFollowing ? 'Following' : 'Follow'}</Button>}
         </div>
-        {(user.links ?? []).length > 0 && (
-          <div className="pf-extras">
-            {(user.links ?? []).map(l => <span key={l} className="link-chip"><Icon name="link" size={13} />{l}</span>)}
-          </div>
-        )}
 
         <SocTabs value={tab} onChange={setTab} options={[{ value: 'own', label: 'Own Work' }, { value: 'collection', label: isMe ? 'Collected' : 'Collected' }]} />
 
@@ -330,7 +378,6 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
           : <div className="empty-note">{user.name}'s shelf is private.</div>)}
       </div>
 
-      <BottomNav current={isMe ? 'profile' : 'home'} search={false} />
 
       <Sheet open={menu} onClose={() => setMenu(false)} dim>
         <div className="menu-list">

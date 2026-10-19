@@ -5,6 +5,14 @@ import type { InkTool, ZineDoc, ZObject } from '../lib/types'
 
 export interface HistoryEntry { doc: ZineDoc; label: string; at: number }
 
+/** Where the Cut & Fold and Collage toolbar sits: along the bottom or top, or upright on a side. */
+export type Dock = 'bottom' | 'top' | 'left' | 'right'
+const DOCK_KEY = 'zeen.dock'
+const savedDock = (): Dock => {
+  try { const d = localStorage.getItem(DOCK_KEY); if (d === 'top' || d === 'left' || d === 'right') return d } catch { /* storage blocked */ }
+  return 'bottom'
+}
+
 export interface InkSettings {
   tool: InkTool
   color: string
@@ -26,6 +34,8 @@ interface EditorState {
   selected: string | null
   cut: { style: CutStyle; roughness: number; ruler: boolean; snap: boolean; topOnly: boolean }
   ink: InkSettings
+  dock: Dock
+  setDock(d: Dock): void
   load(doc: ZineDoc, step?: CreateStep): void
   /** Replace the doc and record an undo step. */
   commit(next: ZineDoc, label: string): void
@@ -54,6 +64,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   step: 'cut',
   selected: null,
   cut: { style: 'straight', roughness: 15, ruler: false, snap: true, topOnly: false },
+  dock: savedDock(),
+  setDock: dock => { set({ dock }); try { localStorage.setItem(DOCK_KEY, dock) } catch { /* storage blocked */ } },
   ink: {
     tool: 'pen', color: '#1A1A1A', size: { pencil: 0.12, pen: 0.1, marker: 0.32, eraser: 0.6 },
     opacity: 1, jitter: 0.1, boil: false, boilStrength: 0.5, boilSpeed: 2, eraseMode: 'area',

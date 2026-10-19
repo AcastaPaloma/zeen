@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { loadImage } from '../lib/assets'
+import { BAYER_TILE, DITHER_CELL, DITHER_LEVELS, ditherPixels } from '../lib/dither'
 import { haptic } from '../lib/feedback'
 import { clamp } from '../lib/geom'
 import { useApp } from '../lib/store'
@@ -266,18 +267,64 @@ export function Ruler({ value, count, onChange, onRelease, dimmed }: {
   )
 }
 
-export function Sheet({ open, onClose, children, title, height = 'auto', className = '', dim = false, noGrab, header }: {
+export function Sheet({ open, onClose, children, title, height = 'auto', className = '', dim = false, noGrab, header, from = null, keep = false }: {
   open: boolean; onClose: () => void; children: ReactNode; title?: ReactNode; height?: 'auto' | 'half' | 'tall' | 'full'; className?: string; dim?: boolean; noGrab?: boolean; header?: ReactNode
+  /**
+   * Grow out of a field elsewhere on screen (client y of its top edge): the sheet starts as just its own
+   * header field, sitting exactly on that one, then rises and unfolds; closing folds back into it.
+   */
+  from?: number | null
+  /** stay in the page (offscreen) while closed, so a tap can focus a field inside it straight away */
+  keep?: boolean
 }) {
   const [mounted, setMounted] = useState(open)
   const [shown, setShown] = useState(false)
   const [dy, setDy] = useState(0)
   const start = useRef<{ y: number; t: number } | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(open)
+
+  // growing out of / folding back into a field: set the folded pose inline, then let CSS carry it to the open one
+  useLayoutEffect(() => {
+    const el = box.current
+    const was = wasOpen.current
+    wasOpen.current = open
+    if (!el || from === null || open === was) return
+    const head = el.querySelector<HTMLElement>('.sheet-head')
+    const field = head?.firstElementChild as HTMLElement | null
+    if (!head || !field) return
+    const parent = el.offsetParent?.getBoundingClientRect().top ?? 0
+    const top = field.getBoundingClientRect().top - el.getBoundingClientRect().top // field's offset inside the sheet
+    const folded = {
+      transform: `translateY(${from - top - (parent + el.offsetTop)}px)`,
+      clipPath: `inset(${top}px 0 ${el.offsetHeight - top - field.offsetHeight}px 0 round 13px)`,
+    }
+    const openPose = { transform: 'translateY(0px)', clipPath: 'inset(0px 0 0px 0 round 20px 20px 0 0)' }
+    if (open) {
+      el.style.transition = 'none'
+      Object.assign(el.style, folded)
+      el.getBoundingClientRect()
+      el.style.transition = ''
+      Object.assign(el.style, openPose)
+      setShown(true)
+    } else {
+      el.style.transition = ''
+      Object.assign(el.style, folded)
+    }
+    // once settled, hand back to the stylesheet (closed is offscreen, so the jump is invisible)
+    const t = setTimeout(() => {
+      el.style.transition = 'none'
+      el.style.transform = ''; el.style.clipPath = ''
+      el.getBoundingClientRect()
+      el.style.transition = ''
+    }, 400)
+    return () => clearTimeout(t)
+  }, [open, from])
   useEffect(() => {
     if (open) { setMounted(true); requestAnimationFrame(() => requestAnimationFrame(() => setShown(true))) }
     else { setShown(false); const t = setTimeout(() => setMounted(false), 320); return () => clearTimeout(t) }
   }, [open])
-  if (!mounted) return null
+  if (!mounted && !keep) return null
   const grab = {
     onPointerDown: (e: React.PointerEvent) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); start.current = { y: e.clientY, t: performance.now() } },
     onPointerMove: (e: React.PointerEvent) => { if (start.current) setDy(Math.max(0, e.clientY - start.current.y)) },
@@ -291,15 +338,114 @@ export function Sheet({ open, onClose, children, title, height = 'auto', classNa
   }
   return (
     <>
-      {dim && <div className={`sheet-dim ${shown ? 'on' : ''}`} onClick={onClose} />}
-      <div className={`sheet sheet-${height} ${shown ? 'on' : ''} ${className}`} role="dialog" aria-label={typeof title === 'string' ? title : undefined}
-        style={dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : undefined}>
+      {dim && mounted && <div className={`sheet-dim ${shown ? 'on' : ''}`} onClick={onClose} />}
+      <div ref={box} className={`sheet sheet-${height} ${shown ? 'on' : ''} ${className}`} role="dialog" aria-label={typeof title === 'string' ? title : undefined}
+        aria-hidden={!mounted} style={dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : undefined}>
         {!noGrab && <div className="sheet-grab" {...grab}><span /></div>}
         {(title || header) && <div className="sheet-head" {...grab}>{header ?? <h3>{title}</h3>}</div>}
         <div className="sheet-body">{children}</div>
       </div>
     </>
   )
+}
+
+/**
+ * Sideways swipes on an area that scrolls vertically (give it touch-action: pan-y). A swipe also swallows
+ * the tap it would otherwise end in, so a card under the finger doesn't open.
+ */
+export function useSwipe(onSwipe: (dir: 'left' | 'right') => void) {
+  const g = useRef<{ x: number; y: number; t: number; id: number } | null>(null)
+  const swiped = useRef(0)
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      g.current = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId }
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      const d = g.current
+      g.current = null
+      if (!d || d.id !== e.pointerId) return
+      const dx = e.clientX - d.x, dy = e.clientY - d.y
+      if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.6 && performance.now() - d.t < 700) {
+        swiped.current = performance.now()
+        onSwipe(dx < 0 ? 'left' : 'right')
+      }
+    },
+    onPointerCancel: () => { g.current = null },
+    onClickCapture: (e: React.MouseEvent) => {
+      if (performance.now() - swiped.current < 350) { e.stopPropagation(); e.preventDefault() }
+    },
+  }
+}
+
+/** Screen background vars for a zine's background colour: the colour itself, and dots that read on it. */
+export function bgVars(bg?: string): CSSProperties {
+  if (!bg) return {}
+  const m = /^#?([0-9a-f]{6})$/i.exec(bg)
+  const n = m ? parseInt(m[1], 16) : 0xf6f6f6
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  const dot = n === 0xf6f6f6 ? undefined : lum > 0.45 ? `color-mix(in srgb, ${bg} 82%, #3D4D63)` : `color-mix(in srgb, ${bg} 80%, #FFFFFF)`
+  return { '--bg': bg, ...(dot ? { '--dot': dot } : {}) } as CSSProperties
+}
+
+/**
+ * Drag a bottom panel by its grabber between resting tops (fractions of the parent's height).
+ * A tap on the grabber steps to the next stop; a flick carries on in its direction.
+ */
+export function usePanelDrag(stops: number[], initial: number) {
+  const [top, setTop] = useState(initial)
+  const [live, setLive] = useState<number | null>(null)
+  const g = useRef<{ y0: number; top0: number; h: number; y: number; t: number; v: number; moved: boolean } | null>(null)
+  const lo = Math.min(...stops), hi = Math.max(...stops)
+  const bind = {
+    onPointerDown: (e: React.PointerEvent) => {
+      const panel = (e.currentTarget as HTMLElement).closest('[data-panel]') as HTMLElement | null
+      const h = panel?.parentElement?.clientHeight ?? 1
+      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+      g.current = { y0: e.clientY, top0: top * h, h, y: e.clientY, t: performance.now(), v: 0, moved: false }
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const d = g.current
+      if (!d) return
+      const now = performance.now()
+      d.v = d.v * 0.6 + ((e.clientY - d.y) / Math.max(1, now - d.t)) * 0.4
+      d.y = e.clientY; d.t = now
+      const dy = e.clientY - d.y0
+      if (!d.moved && Math.abs(dy) < 4) return
+      d.moved = true
+      // rubber-band past the first and last stops
+      const raw = d.top0 + dy, min = lo * d.h, max = hi * d.h
+      const px = raw < min ? min - Math.sqrt(min - raw) * 3 : raw > max ? max + Math.sqrt(raw - max) * 3 : raw
+      setLive(px)
+    },
+    onPointerUp: () => end(),
+    onPointerCancel: () => end(),
+  }
+  function end() {
+    const d = g.current
+    g.current = null
+    if (!d) return
+    const sorted = [...stops].sort((x, y) => x - y)
+    let next: number
+    if (!d.moved) {
+      // tap: open one step further; from fully open, back to where it started
+      const i = sorted.findIndex(x => Math.abs(x - top) < 0.01)
+      next = i <= 0 ? initial : sorted[i - 1]
+    } else {
+      const aim = ((live ?? d.top0) + d.v * 160) / d.h
+      next = sorted.reduce((b, x) => (Math.abs(x - aim) < Math.abs(b - aim) ? x : b), sorted[0])
+    }
+    if (next !== top) haptic('tick')
+    setTop(next)
+    setLive(null)
+  }
+  const style: CSSProperties = live !== null ? { top: live, transition: 'none' } : { top: `${top * 100}%` }
+  return { top, bind, style, dragging: live !== null }
+}
+
+/** Two-bar drag handle for panels and sheets. */
+export function Grabber({ label, className = '', ...bind }: { label: string; className?: string } & Partial<ReturnType<typeof usePanelDrag>['bind']>) {
+  return <div className={`grabber ${className}`} role="button" aria-label={label} {...bind}><span /></div>
 }
 
 export function Toast() {
@@ -314,78 +460,102 @@ export function Toast() {
   )
 }
 
-const ditherCache = new Map<string, string>()
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+const ditherCache = new Map<string, { url: string; w: number; h: number }>()
 
-/** Tool icons are dithered photos: grey when idle, orange when selected. */
-export function DitherImg({ src, color, size, className = '', alt = '', style, scale = 2, stretch = false, colorful = false }: {
-  src: string; color: string; size: number; className?: string; alt?: string; style?: CSSProperties; scale?: number
-  /** spread the image's own light range across the dither, so near-white renders (blank paper) keep their shading */
-  stretch?: boolean
-  /** keep the image's colours: each channel is dithered to four levels instead of tinting with `color` */
-  colorful?: boolean
+/**
+ * An image in the app's dither look (lib/dither.ts): colour, Bayer 16×16, 2 px cells, three levels.
+ * It fits inside `size` (CSS px, a square or [width, height]) at whole cells, so every cell is 2 px.
+ */
+export function DitherImg({ src, size, className = '', alt = '', style }: {
+  src: string; size: number | [number, number]; className?: string; alt?: string; style?: CSSProperties
 }) {
-  const key = `${src}|${color}|${size}|${scale}|${stretch}|${colorful}`
-  const [url, setUrl] = useState(ditherCache.get(key) ?? '')
+  const [bw, bh] = typeof size === 'number' ? [size, size] : size
+  const key = `${src}|${bw}x${bh}`
+  const [out, setOut] = useState(ditherCache.get(key) ?? null)
   useEffect(() => {
-    if (ditherCache.has(key)) { setUrl(ditherCache.get(key)!); return }
+    if (ditherCache.has(key)) { setOut(ditherCache.get(key)!); return }
     let alive = true
     loadImage(src).then(img => {
-      const s = Math.min(1, (size * 2) / Math.max(img.width, img.height))
+      const s = Math.min(bw / img.width, bh / img.height) / DITHER_CELL
       const w = Math.max(1, Math.round(img.width * s)), h = Math.max(1, Math.round(img.height * s))
       const c = document.createElement('canvas')
       c.width = w; c.height = h
       const ctx = c.getContext('2d', { willReadFrequently: true })!
       ctx.drawImage(img, 0, 0, w, h)
       const d = ctx.getImageData(0, 0, w, h)
-      const m = /^#?([0-9a-f]{6})$/i.exec(color)
-      const n = m ? parseInt(m[1], 16) : 0x7b7b7b
-      const cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255
-      let lo = 0, hi = 1
-      if (stretch) {
-        lo = 1; hi = 0
-        for (let i = 0; i < d.data.length; i += 4) {
-          if (d.data[i + 3] < 30) continue
-          const l = (0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]) / 255
-          if (l < lo) lo = l; if (l > hi) hi = l
-        }
-        if (hi - lo < 0.02) { lo = hi - 0.2 } // flat blank paper reads as light paper
-      }
-      const edge = (x: number, y: number) => {
-        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const xx = x + ox, yy = y + oy
-          if (xx < 0 || yy < 0 || xx >= w || yy >= h || d.data[(yy * w + xx) * 4 + 3] < 30) return true
-        }
-        return false
-      }
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4
-        if (d.data[i + 3] < 30) { d.data[i + 3] = 0; continue }
-        if (colorful) {
-          const t = (BAYER[(Math.floor(y / scale) % 4) * 4 + (Math.floor(x / scale) % 4)] + 0.5) / 16
-          for (let c = 0; c < 3; c++) d.data[i + c] = Math.min(3, Math.floor((d.data[i + c] / 255) * 3 + t)) * 85
-          d.data[i + 3] = 255
-          continue
-        }
-        const l0 = (0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]) / 255
-        const l = stretch ? 0.12 + ((l0 - lo) / (hi - lo)) * 0.9 : l0
-        const t = (BAYER[(Math.floor(y / scale) % 4) * 4 + (Math.floor(x / scale) % 4)] + 0.5) / 16
-        const ink = l < t * 1.05 || (stretch && edge(x, y))
-        // dark dots in the tint colour, light dots in a pale tint so the silhouette reads
-        const pale = stretch ? 0.08 : 0.35
-        d.data[i] = ink ? cr * 0.75 : 255 - (255 - cr) * pale
-        d.data[i + 1] = ink ? cg * 0.75 : 255 - (255 - cg) * pale
-        d.data[i + 2] = ink ? cb * 0.75 : 255 - (255 - cb) * pale
-        d.data[i + 3] = 255
-      }
+      ditherPixels(d)
+      for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] < 30 ? 0 : 255
       ctx.putImageData(d, 0, 0)
-      const u = c.toDataURL()
-      ditherCache.set(key, u)
-      if (alive) setUrl(u)
+      const r = { url: c.toDataURL(), w: w * DITHER_CELL, h: h * DITHER_CELL }
+      ditherCache.set(key, r)
+      if (alive) setOut(r)
     }).catch(() => {})
     return () => { alive = false }
-  }, [key, src, color, size, scale, stretch, colorful])
-  return url ? <img src={url} alt={alt} className={`dither-img ${className}`} style={{ imageRendering: 'pixelated', ...style }} draggable={false} /> : <span className={className} style={{ display: 'inline-block', width: size, height: size, ...style }} />
+  }, [key, src, bw, bh])
+  return out
+    ? <img src={out.url} alt={alt} className={`dither-img ${className}`} style={{ imageRendering: 'pixelated', width: out.w, height: out.h, ...style }} draggable={false} />
+    : <span className={className} style={{ display: 'inline-block', width: bw, height: bh, ...style }} />
+}
+
+/** The SVG filter behind `filter: url(#zeen-dither)`: the same dither, applied to live content. */
+export function DitherDefs() {
+  const k = 1 / DITHER_LEVELS
+  const table = Array.from({ length: DITHER_LEVELS }, (_, i) => i / (DITHER_LEVELS - 1)).join(' ')
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden focusable="false">
+      <filter id="zeen-dither" x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
+        <feImage href={BAYER_TILE} x="0" y="0" width={16 * DITHER_CELL} height={16 * DITHER_CELL} preserveAspectRatio="none" result="cell" />
+        <feTile in="cell" result="map" />
+        {/* (levels - 1) * colour + threshold, then floor into the levels */}
+        <feComposite in="SourceGraphic" in2="map" operator="arithmetic" k1="0" k2={(DITHER_LEVELS - 1) * k} k3={k} k4="0" result="mix" />
+        <feComponentTransfer in="mix" result="steps">
+          <feFuncR type="discrete" tableValues={table} />
+          <feFuncG type="discrete" tableValues={table} />
+          <feFuncB type="discrete" tableValues={table} />
+        </feComponentTransfer>
+        <feComposite in="steps" in2="SourceGraphic" operator="in" />
+      </filter>
+    </svg>
+  )
+}
+
+const coverColors = new Map<string, string>()
+
+/** The most common colour of an image (vivid colours count a little extra), for tinting around it. */
+export function useDominantColor(src?: string) {
+  const [color, setColor] = useState(src ? coverColors.get(src) ?? null : null)
+  useEffect(() => {
+    if (!src) { setColor(null); return }
+    if (coverColors.has(src)) { setColor(coverColors.get(src)!); return }
+    let alive = true
+    loadImage(src).then(img => {
+      const S = 32
+      const c = document.createElement('canvas')
+      c.width = S; c.height = S
+      const ctx = c.getContext('2d', { willReadFrequently: true })!
+      ctx.drawImage(img, 0, 0, S, S)
+      const d = ctx.getImageData(0, 0, S, S).data
+      const bins = new Map<number, { w: number; r: number; g: number; b: number }>()
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 128) continue
+        const r = d[i], g = d[i + 1], b = d[i + 2]
+        // chroma, not HSV saturation, so near-black pixels don't count as vivid
+        const chroma = (Math.max(r, g, b) - Math.min(r, g, b)) / 255
+        const w = 0.25 + chroma * 2
+        const k = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5)
+        const e = bins.get(k) ?? { w: 0, r: 0, g: 0, b: 0 }
+        e.w += w; e.r += r * w; e.g += g * w; e.b += b * w
+        bins.set(k, e)
+      }
+      let best: { w: number; r: number; g: number; b: number } | null = null
+      for (const e of bins.values()) if (!best || e.w > best.w) best = e
+      const out = best ? `rgb(${Math.round(best.r / best.w)}, ${Math.round(best.g / best.w)}, ${Math.round(best.b / best.w)})` : '#E9E9E9'
+      coverColors.set(src, out)
+      if (alive) setColor(out)
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [src])
+  return color
 }
 
 export function Avatar({ src, size = 28, ring }: { src: string; size?: number; ring?: boolean }) {

@@ -194,8 +194,13 @@
 .sheet-half { height: 52%; }
 .sheet-tall { height: 78%; }
 .sheet-full { height: calc(100% - var(--safe-top) - 64px); }
-.sheet-grab { flex: none; height: 22px; display: grid; place-items: center; touch-action: none; cursor: grab; }
-.sheet-grab span { width: 36px; height: 4px; border-radius: 2px; background: #DADADA; }
+.sheet-grab, .grabber { flex: none; height: 24px; display: grid; place-items: center; touch-action: none; cursor: grab; }
+/* drag handles are the two bars of "Group 95.svg" in the design file's units (--u): the second bar is the span's shadow */
+.sheet-grab span, .grabber span {
+  width: calc(28.83 * var(--u)); height: calc(1.466 * var(--u)); border-radius: calc(0.733 * var(--u));
+  background: var(--grab, #EFEFEF); box-shadow: 0 calc(3.77 * var(--u)) 0 var(--grab, #EFEFEF);
+  transform: translateY(calc(-1.885 * var(--u)));
+}
 .sheet-head { flex: none; padding: 0 20px 6px; touch-action: none; }
 .sheet-head h3 { margin: 4px 0 6px; font-size: 17px; font-weight: 500; text-align: center; }
 .sheet-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 20px 20px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
@@ -237,8 +242,11 @@
 
 /* ---------------------------------------------------------------- helpers */
 
-.screen { position: absolute; inset: 0; overflow: hidden; background: var(--canvas); }
-.scroll { overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.screen { position: absolute; inset: 0; overflow: hidden; background-color: var(--canvas); }
+/* a screen with the dot grid takes its zine's background colour (index.css .dots) */
+.screen.dots { background-color: var(--bg, var(--canvas)); }
+/* phone-style scrolling: no visible bar in any browser (standard property here, WebKit's pseudo-element below) */
+.scroll { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .hscroll { display: flex; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .hscroll::-webkit-scrollbar, .scroll::-webkit-scrollbar { display: none; }
 .muted { color: var(--mute); }
@@ -258,12 +266,6 @@
 
 @keyframes pop-in { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes fade-up { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes slap {
-  0% { transform: translate(-50%, -50%) scale(2.4) rotate(-25deg); opacity: 0; }
-  55% { transform: translate(-50%, -50%) scale(0.88) rotate(-8deg); opacity: 1; }
-  75% { transform: translate(-50%, -50%) scale(1.08) rotate(-12deg); }
-  100% { transform: translate(-50%, -50%) scale(1) rotate(-10deg); }
-}
 
 /* Material icons (Icon.tsx): heart and bookmark swap to their filled form when on */
 .icon .i-solid { display: none; }

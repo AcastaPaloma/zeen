@@ -5,13 +5,13 @@ import { clamp, rng } from '../lib/geom'
 import { music, waveform } from '../lib/music'
 import type { ZineDoc } from '../lib/types'
 import { Icon } from '../ui/Icon'
-import { DitherImg, Sheet, Slider } from '../ui/kit'
+import { Sheet, Slider, useDominantColor } from '../ui/kit'
 import './collage-sheets.css'
 
 const SPAN = 60 // seconds the scrubber covers
 const PREVIEW = 15
 
-/** Scattered, overlapping album covers — like a pile of records on the floor. */
+/** Scattered, overlapping covers — like a pile of records on the floor. Each cover is one song. */
 function layout(albums: Album[]) {
   const r = rng(42)
   return albums.map((a, i) => {
@@ -81,6 +81,7 @@ export function MusicPicker({ open, onClose, value, onChange }: {
   }
 
   const bars = useMemo(() => (track ? waveform(track, 56) : []), [track])
+  const coverColor = useDominantColor(sel?.album.cover)
 
   return (
     <Sheet open={open} onClose={() => { music.stop(); onClose() }} height="tall" className="music-sheet">
@@ -117,44 +118,27 @@ export function MusicPicker({ open, onClose, value, onChange }: {
         })}
       </div>
 
-      {open_ && (
+      {/* the chosen song: just pick which 15 seconds play */}
+      {open_ && track && sel?.album.id === open_.id && (
         <div className="tracklist" key={open_.id}>
-          <div className="tl-head">
-            <b>{open_.title}</b><small>{open_.artist}</small>
+          <div className="wave" ref={wave} role="slider" aria-label="Start point" aria-valuenow={start} aria-valuemin={0} aria-valuemax={SPAN - PREVIEW} tabIndex={0}
+            onKeyDown={e => { if (e.key === 'ArrowRight') setStart(s => Math.min(SPAN - PREVIEW, s + 1)); if (e.key === 'ArrowLeft') setStart(s => Math.max(0, s - 1)) }}
+            onPointerDown={e => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); scrub(e.clientX) }}
+            onPointerMove={e => { if (e.buttons || e.pointerType === 'touch') scrub(e.clientX) }}
+            onPointerUp={() => play(track, start)}>
+            {bars.map((b, i) => {
+              const t = (i / bars.length) * SPAN
+              const inWin = t >= start && t < start + PREVIEW
+              return <span key={i} className={inWin ? 'in' : ''} style={{ height: `${b * 100}%` }} />
+            })}
+            <span className="wave-win" style={{ left: `${(start / SPAN) * 100}%`, width: `${(PREVIEW / SPAN) * 100}%` }} />
           </div>
-          {open_.tracks.map(t => {
-            const on = track === t.id
-            return (
-              <button key={t.id} className={`tl-row ${on ? 'on' : ''}`} onClick={() => pick(t.id)} aria-pressed={on}>
-                {on ? <img src={open_.cover} alt="" /> : <DitherImg src={open_.cover} color="#9A9A9A" size={36} scale={1} />}
-                <span>{t.title}</span>
-                <small>{t.bpm} bpm</small>
-                {on && playing && <span className="eq" aria-hidden><i /><i /><i /></span>}
-              </button>
-            )
-          })}
-          {track && sel?.album.id === open_.id && (
-            <>
-              <div className="wave" ref={wave} role="slider" aria-label="Start point" aria-valuenow={start} aria-valuemin={0} aria-valuemax={SPAN - PREVIEW} tabIndex={0}
-                onKeyDown={e => { if (e.key === 'ArrowRight') setStart(s => Math.min(SPAN - PREVIEW, s + 1)); if (e.key === 'ArrowLeft') setStart(s => Math.max(0, s - 1)) }}
-                onPointerDown={e => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); scrub(e.clientX) }}
-                onPointerMove={e => { if (e.buttons || e.pointerType === 'touch') scrub(e.clientX) }}
-                onPointerUp={() => play(track, start)}>
-                {bars.map((b, i) => {
-                  const t = (i / bars.length) * SPAN
-                  const inWin = t >= start && t < start + PREVIEW
-                  return <span key={i} className={inWin ? 'in' : ''} style={{ height: `${b * 100}%` }} />
-                })}
-                <span className="wave-win" style={{ left: `${(start / SPAN) * 100}%`, width: `${(PREVIEW / SPAN) * 100}%` }} />
-              </div>
-              <Slider label="Volume" value={volume} onChange={setVolume} format={v => `${v}%`} />
-            </>
-          )}
+          <Slider label="Volume" value={volume} onChange={setVolume} format={v => `${v}%`} />
         </div>
       )}
       <div style={{ height: 96 }} />
 
-      <div className={`now-playing ${sel ? 'on' : ''}`}>
+      <div className={`now-playing ${sel ? 'on' : ''}`} style={{ '--np': coverColor ?? '#F2F2F2' } as CSSProperties}>
         {sel && (
           <>
             <img src={sel.album.cover} alt="" />
