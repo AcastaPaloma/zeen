@@ -186,7 +186,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // ---------------------------------------------------------------- text
 
-const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Permanent Marker"', '"Stardos Stencil"', '"Rubik Mono One"']
+const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Bricolage Grotesque"', '"Stardos Stencil"', '"Rubik Mono One"']
 const RANSOM_BG = ['#FFFFFF', '#F8D647', '#111111', '#FF4934', '#C0F6FF', '#FFD5F4', '#EBEFD7', '#245AE2']
 
 const measureCtx = scratch.getContext('2d')!

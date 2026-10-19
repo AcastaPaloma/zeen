@@ -10,7 +10,7 @@ import type { ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
 import { Button, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
-import { copyLink, HeartSticker, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicChip, type Box } from './Preview'
+import { copyLink, HeartSticker, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicTile, AlbumPopup, type Box } from './Preview'
 import './reading.css'
 
 interface ReaderSticker { src: string; fx: number; fy: number; rot: number }
@@ -60,6 +60,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const [stickerPick, setStickerPick] = useState<{ fx: number; fy: number } | null>(null)
   const [stickers, setStickers] = useState<ReaderSticker[]>(() => loadStickers(id))
   const [showHint, setShowHint] = useState(!seenHint)
+  const [album, setAlbum] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const root = useRef<HTMLDivElement>(null)
   const press = useRef<{ x: number; y: number; timer: number } | null>(null)
@@ -225,7 +226,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
           <IconBtn name={mutedS ? 'volumeOff' : 'volume'} label={mutedS ? 'Unmute' : 'Mute'} onClick={toggleMute} />
         </PillGroup>
       </div>
-      {doc.music && <div className="read-music"><MusicChip trackId={doc.music.track} compact /></div>}
+      {doc.music && <div className="read-music"><MusicTile trackId={doc.music.track} onOpen={() => setAlbum(true)} /></div>}
 
       <div className="read-stage" ref={stage} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <ZineView doc={doc} mode="page" keepAngles={false} onScene={onScene} />
@@ -273,6 +274,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
         </>
       )}
 
+      <AlbumPopup trackId={doc.music?.track} open={album} onClose={() => setAlbum(false)} />
       <Sheet open={!!stickerPick} onClose={() => setStickerPick(null)} title="Stick something on it" dim>
         <div className="sticker-pick">
           {STICKERS.map(s => <button key={s.id} onClick={() => addSticker(s.src)} aria-label={s.name}><img src={s.src} alt="" /></button>)}

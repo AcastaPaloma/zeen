@@ -61,17 +61,45 @@ export function useZineMusic(doc: ZineDoc | undefined, active: boolean) {
   useEffect(() => () => { if (doc?.music && music.state.track === doc.music.track) music.stop() }, [doc?.music])
 }
 
-export function MusicChip({ trackId, compact }: { trackId?: string; compact?: boolean }) {
+/** The zine's song as a small rounded-square cover. Tapping it opens the album. */
+export function MusicTile({ trackId, onOpen }: { trackId?: string; onOpen: () => void }) {
   const st = useMusicState()
   const t = trackById(trackId)
   if (!t || !trackId) return null
   const playing = st.playing && st.track === trackId
   return (
-    <button className={`music-chip ${compact ? 'compact' : ''}`} onClick={() => { haptic('tick'); music.toggle(trackId) }} aria-label={`${playing ? 'Pause' : 'Play'} ${t.track.title} by ${t.album.artist}`}>
-      <img src={t.album.cover} alt="" className={playing ? 'spin' : ''} />
-      <span className="mc-text"><b>{t.track.title}</b><small>{playing ? 'playing' : t.album.artist}</small></span>
-      <span className="mc-btn"><Icon name={playing ? 'pause' : 'play'} size={13} stroke={2.6} /></span>
+    <button className="music-tile" onClick={() => { haptic('tick'); onOpen() }} aria-label={`Soundtrack: ${t.track.title} by ${t.album.artist}`}>
+      <img src={t.album.cover} alt="" draggable={false} />
+      {playing && <span className="mt-eq" aria-hidden><i /><i /><i /></span>}
     </button>
+  )
+}
+
+/** The album cover, big, over a dithered screen. */
+export function AlbumPopup({ trackId, open, onClose }: { trackId?: string; open: boolean; onClose: () => void }) {
+  const st = useMusicState()
+  const t = trackById(trackId)
+  useEffect(() => {
+    if (!open) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [open, onClose])
+  if (!t || !trackId) return null
+  const playing = st.playing && st.track === trackId
+  return (
+    <div className={`album-pop ${open ? 'on' : ''}`} onClick={onClose} role="dialog" aria-modal aria-hidden={!open} aria-label={`${t.album.title} by ${t.album.artist}`}>
+      <div className="ap-dither" aria-hidden />
+      <div className="ap-card" onClick={e => e.stopPropagation()}>
+        <img className="ap-cover" src={t.album.cover} alt={`${t.album.title} cover`} draggable={false} />
+        <div className="ap-row">
+          <span className="ap-meta"><b>{t.track.title}</b><small>{t.album.artist} · {t.album.title}</small></span>
+          <button className="ap-play" onClick={() => { haptic('tick'); music.toggle(trackId) }} aria-label={playing ? 'Pause' : 'Play'}>
+            <Icon name={playing ? 'pause' : 'play'} size={16} stroke={2.6} />
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -250,6 +278,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
   const [slap, setSlap] = useState(0)
   const [noteOk, setNoteOk] = useState(false)
   const [sheet, setSheet] = useState<'download' | 'more' | null>(null)
+  const [album, setAlbum] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const root = useRef<HTMLDivElement>(null)
   const box = useZineBox(scene)
@@ -327,7 +356,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
         </PillGroup>
       </div>
 
-      {doc.music && <div className="pv-music"><MusicChip trackId={doc.music.track} /></div>}
+      {doc.music && <div className="pv-music"><MusicTile trackId={doc.music.track} onOpen={() => setAlbum(true)} /></div>}
 
       <div className="pv-stage" ref={stage}>
         <ZineView doc={doc} mode="preview" handles={false} keepAngles={false} onScene={onScene} className={gated ? 'gated' : ''} />
@@ -366,6 +395,7 @@ export default function Preview({ id, from, active }: { id: string; from?: DOMRe
       </div>
 
       <PullTab doc={doc} />
+      <AlbumPopup trackId={doc.music?.track} open={album} onClose={() => setAlbum(false)} />
 
       <Sheet open={sheet === 'download'} onClose={() => setSheet(null)} title="Download" dim>
         <div className="menu-list">

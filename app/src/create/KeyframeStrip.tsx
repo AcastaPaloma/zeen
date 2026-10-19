@@ -4,7 +4,7 @@ import { uid } from '../lib/geom'
 import { renderThumb } from '../lib/thumbs'
 import type { ZineDoc } from '../lib/types'
 import { Icon } from '../ui/Icon'
-import { Sheet } from '../ui/kit'
+import { DitherImg, Sheet } from '../ui/kit'
 import { useEditor } from './editor'
 
 /** Geometry-only signature so thumbnails re-render when folds change, not on every collage edit. */
@@ -16,7 +16,7 @@ function sig(doc: ZineDoc, i: number) {
   return h
 }
 
-export function KeyThumb({ doc, i }: { doc: ZineDoc; i: number }) {
+export function KeyThumb({ doc, i, dither }: { doc: ZineDoc; i: number; dither?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
   const key = sig(doc, i)
   useEffect(() => {
@@ -27,11 +27,12 @@ export function KeyThumb({ doc, i }: { doc: ZineDoc; i: number }) {
     return () => { alive = false; clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, i])
-  return url ? <img src={url} alt="" draggable={false} /> : <span className="kt-ph" />
+  if (!url) return <span className="kt-ph" />
+  return dither ? <DitherImg src={url} color="#5E5E5E" size={64} scale={1} stretch /> : <img src={url} alt="" draggable={false} />
 }
 
-export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, readOnly }: {
-  doc: ZineDoc; active: number; onPick: (i: number) => void; onAdd?: () => void; onPlay?: () => void; playing?: boolean; readOnly?: boolean
+export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, readOnly, dither }: {
+  doc: ZineDoc; active: number; onPick: (i: number) => void; onAdd?: () => void; onPlay?: () => void; playing?: boolean; readOnly?: boolean; dither?: boolean
 }) {
   const ed = useEditor()
   const [menu, setMenu] = useState<number | null>(null)
@@ -59,7 +60,7 @@ export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, rea
             onPointerDown={() => { if (readOnly) return; press.current = window.setTimeout(() => { haptic('firm'); setName(k.name); setMenu(i) }, 480) }}
             onPointerUp={() => clearTimeout(press.current)} onPointerLeave={() => clearTimeout(press.current)}
             onClick={() => { haptic('tick'); onPick(i) }}>
-            <KeyThumb doc={doc} i={i} />
+            <KeyThumb doc={doc} i={i} dither={dither} />
             <span className="kfi-n">{i === 0 ? 'cover' : i + 1}</span>
           </button>
         ))}

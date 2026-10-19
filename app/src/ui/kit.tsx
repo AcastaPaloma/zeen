@@ -218,10 +218,12 @@ const ditherCache = new Map<string, string>()
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 
 /** Tool icons are dithered photos: grey when idle, orange when selected. */
-export function DitherImg({ src, color, size, className = '', alt = '', style, scale = 2 }: {
+export function DitherImg({ src, color, size, className = '', alt = '', style, scale = 2, stretch = false }: {
   src: string; color: string; size: number; className?: string; alt?: string; style?: CSSProperties; scale?: number
+  /** spread the image's own light range across the dither, so near-white renders (blank paper) keep their shading */
+  stretch?: boolean
 }) {
-  const key = `${src}|${color}|${size}|${scale}`
+  const key = `${src}|${color}|${size}|${scale}|${stretch}`
   const [url, setUrl] = useState(ditherCache.get(key) ?? '')
   useEffect(() => {
     if (ditherCache.has(key)) { setUrl(ditherCache.get(key)!); return }
@@ -237,16 +239,35 @@ export function DitherImg({ src, color, size, className = '', alt = '', style, s
       const m = /^#?([0-9a-f]{6})$/i.exec(color)
       const n = m ? parseInt(m[1], 16) : 0x7b7b7b
       const cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255
+      let lo = 0, hi = 1
+      if (stretch) {
+        lo = 1; hi = 0
+        for (let i = 0; i < d.data.length; i += 4) {
+          if (d.data[i + 3] < 30) continue
+          const l = (0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]) / 255
+          if (l < lo) lo = l; if (l > hi) hi = l
+        }
+        if (hi - lo < 0.02) { lo = hi - 0.2 } // flat blank paper reads as light paper
+      }
+      const edge = (x: number, y: number) => {
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const xx = x + ox, yy = y + oy
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h || d.data[(yy * w + xx) * 4 + 3] < 30) return true
+        }
+        return false
+      }
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4
         if (d.data[i + 3] < 30) { d.data[i + 3] = 0; continue }
-        const l = (0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]) / 255
+        const l0 = (0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]) / 255
+        const l = stretch ? 0.12 + ((l0 - lo) / (hi - lo)) * 0.9 : l0
         const t = (BAYER[(Math.floor(y / scale) % 4) * 4 + (Math.floor(x / scale) % 4)] + 0.5) / 16
-        const ink = l < t * 1.05
+        const ink = l < t * 1.05 || (stretch && edge(x, y))
         // dark dots in the tint colour, light dots in a pale tint so the silhouette reads
-        d.data[i] = ink ? cr * 0.75 : 255 - (255 - cr) * 0.35
-        d.data[i + 1] = ink ? cg * 0.75 : 255 - (255 - cg) * 0.35
-        d.data[i + 2] = ink ? cb * 0.75 : 255 - (255 - cb) * 0.35
+        const pale = stretch ? 0.08 : 0.35
+        d.data[i] = ink ? cr * 0.75 : 255 - (255 - cr) * pale
+        d.data[i + 1] = ink ? cg * 0.75 : 255 - (255 - cg) * pale
+        d.data[i + 2] = ink ? cb * 0.75 : 255 - (255 - cb) * pale
         d.data[i + 3] = 255
       }
       ctx.putImageData(d, 0, 0)
@@ -255,7 +276,7 @@ export function DitherImg({ src, color, size, className = '', alt = '', style, s
       if (alive) setUrl(u)
     }).catch(() => {})
     return () => { alive = false }
-  }, [key, src, color, size, scale])
+  }, [key, src, color, size, scale, stretch])
   return url ? <img src={url} alt={alt} className={`dither-img ${className}`} style={{ imageRendering: 'pixelated', ...style }} draggable={false} /> : <span className={className} style={{ display: 'inline-block', width: size, height: size, ...style }} />
 }
 

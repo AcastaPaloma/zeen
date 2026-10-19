@@ -295,7 +295,10 @@ export const SIZES: Record<string, { w: number; h: number; label: string }> = {
   square: { w: 18, h: 18, label: 'Square' },
 }
 
-export type TemplateId = 'blank' | 'half' | 'gatefold' | 'accordion' | 'trifold'
+export type TemplateId = 'blank' | 'half' | 'gatefold' | 'accordion' | 'trifold' | 'book8' | 'book12' | 'book16'
+
+/** Booklet templates: a half-folded sheet plus loose leaves sewn into the spine. */
+const BOOK_PAGES: Partial<Record<TemplateId, number>> = { book8: 8, book12: 12, book16: 16 }
 
 export function frameFor(mp: MultiPoly): Frame {
   const b = bbox(mp)
@@ -310,7 +313,7 @@ export function newDoc(opts: {
   let w = opts.w ?? sz.w, h = opts.h ?? sz.h
   // folded templates: panel size comes from the chosen sheet, laid out side by side
   const pw = Math.min(w, h) * 0.7, ph = pw * 1.54
-  if (tpl === 'half') { w = pw * 2; h = ph }
+  if (tpl === 'half' || BOOK_PAGES[tpl]) { w = pw * 2; h = ph }
   if (tpl === 'gatefold') { w = pw * 2; h = ph }
   if (tpl === 'trifold') { w = pw * 3; h = ph }
   if (tpl === 'accordion') { w = pw * 4; h = ph }
@@ -370,6 +373,29 @@ export function newDoc(opts: {
     }
   }
   if (tpl === 'trifold') doc.creases[1].stack = 2 // the left door closes over the right one
+  const pages = BOOK_PAGES[tpl]
+  if (pages) {
+    // the sheet is the outer cover; each leaf adds two pages. Turned pages fan a couple of degrees
+    // above the ones under them so they stack like a real booklet.
+    const spine = mk('c1', 'sheet', 0, 1, 1)
+    const leaves = pages / 2 - 2
+    const leafShape = rect(-w / 2, -h / 2, w / 2, h)
+    doc.creases = [spine]
+    for (let i = 1; i <= leaves; i++) {
+      doc.surfaces.push({ id: `leaf${i}`, kind: 'leaf', outline: leafShape, frame: frameFor(leafShape), color: sheet.color, stock: sheet.stock })
+      doc.creases.push({ ...spine, id: `l${i}`, leaf: `leaf${i}` })
+    }
+    const closed = (): Record<string, number> => Object.fromEntries(doc.creases.map(c => [c.id, 180]))
+    const pose = closed()
+    doc.keyframes = [kf('Cover', { ...pose })]
+    pose.c1 = 0
+    doc.keyframes.push(kf('Pages 2–3', { ...pose }))
+    for (let i = leaves, turned = 1; i >= 1; i--, turned++) {
+      pose[`l${i}`] = turned * 2
+      const n = 2 + turned * 2
+      doc.keyframes.push(kf(`Pages ${n}–${n + 1}`, { ...pose }))
+    }
+  }
   return doc
 }
 

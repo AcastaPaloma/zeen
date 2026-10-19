@@ -47,7 +47,7 @@
 .btn {
   height: 44px;
   padding: 0 18px;
-  border-radius: 12px;
+  border-radius: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -61,13 +61,13 @@
 .btn:disabled { opacity: 0.4; pointer-events: none; }
 .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 30%, transparent); }
 .btn-secondary { background: var(--panel); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-1); }
-.btn-dark { background: var(--ink); color: #fff; border-radius: 22px; height: 36px; padding: 0 16px; font-size: 13px; }
+.btn-dark { background: var(--ink); color: #fff; border-radius: 13px; height: 36px; padding: 0 16px; font-size: 13px; }
 .btn-ghost { color: var(--mute); }
 
 .chip {
   height: 30px;
   padding: 0 12px;
-  border-radius: 15px;
+  border-radius: 13px;
   background: var(--chip);
   font-size: 13px;
   color: var(--ink-2);
@@ -82,7 +82,7 @@
   display: grid;
   grid-template-columns: repeat(var(--n), 1fr);
   background: var(--chip);
-  border-radius: 12px;
+  border-radius: 13px;
   padding: 3px;
   height: 38px;
 }
@@ -93,7 +93,7 @@
   width: calc((100% - 6px) / var(--n));
   transform: translateX(calc(100% * var(--i)));
   background: #fff;
-  border-radius: 9px;
+  border-radius: 10px; /* nested inside the 13px track with 3px of padding */
   box-shadow: var(--shadow-1);
   transition: transform var(--t-med) var(--ease-out);
 }
@@ -136,7 +136,7 @@
 .vslider {
   width: 44px;
   background: var(--panel);
-  border-radius: 22px;
+  border-radius: 13px;
   box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
@@ -214,7 +214,7 @@
   transform: translate(-50%, -140%);
   background: var(--ink);
   color: #fff;
-  border-radius: 14px;
+  border-radius: 13px;
   padding: 0 6px 0 16px;
   min-height: 44px;
   display: flex;
@@ -231,7 +231,7 @@
 .toast.on { transform: translate(-50%, 0); opacity: 1; }
 .toast.on button { pointer-events: auto; }
 .toast span { padding: 12px 10px 12px 0; overflow: hidden; text-overflow: ellipsis; }
-.toast button { color: var(--lime); font-weight: 600; height: 34px; padding: 0 10px; border-radius: 10px; background: rgba(255,255,255,.08); }
+.toast button { color: var(--accent); font-weight: 600; height: 34px; padding: 0 10px; border-radius: 13px; background: rgba(255,255,255,.08); }
 .toast:not(:has(button)) { padding-right: 16px; }
 
 .avatar { border-radius: 50%; object-fit: cover; background: #eee; flex: none; }

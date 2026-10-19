@@ -9,7 +9,7 @@ import type { InkObj, InkTool, ScrapItem, ScrapObj, Side, Stroke, TextObj, Vec2,
 import { FEELS } from '../three/spring'
 import type { PageRef, PointerInfo, TwoInfo, ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
-import { CheckBtn, DitherImg, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Slider, Toggle, VSlider } from '../ui/kit'
+import { CheckBtn, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Slider, Toggle, VSlider } from '../ui/kit'
 import { boxCorners, isClipped, objectAt, objectBox, pageRect, pagesOf, pageThumb, transformObject } from './collageUtil'
 import type { StepProps } from './Create'
 import { HistorySheet } from './CutFold'
@@ -23,11 +23,12 @@ import { TextEditor } from './TextEditor'
 
 type SheetName = 'none' | 'scrap' | 'effects' | 'layers' | 'music' | 'bg' | 'more' | 'ink' | 'history'
 
-const INK_TOOLS: { id: InkTool; src: string; label: string; h: number }[] = [
-  { id: 'pencil', src: TOOLS.pencil, label: 'Pencil', h: 96 },
-  { id: 'pen', src: TOOLS.pen, label: 'Pen', h: 92 },
-  { id: 'marker', src: TOOLS.marker, label: 'Marker', h: 84 },
-  { id: 'eraser', src: TOOLS.eraser, label: 'Eraser', h: 58 },
+/** h: drawn height; sink: how far the tool drops below the tray edge */
+const INK_TOOLS: { id: InkTool; src: string; label: string; h: number; sink: number }[] = [
+  { id: 'pencil', src: TOOLS.pencil, label: 'Pencil', h: 90, sink: 26 },
+  { id: 'pen', src: TOOLS.pen, label: 'Pen', h: 90, sink: 26 },
+  { id: 'marker', src: TOOLS.marker, label: 'Marker', h: 91, sink: 26 },
+  { id: 'eraser', src: TOOLS.eraser, label: 'Eraser', h: 39, sink: 2 },
 ]
 const INK_COLORS = ['#1A1A1A', '#FFFFFF', '#FF4934', '#F8D647', '#DEFF7C', '#4BA334', '#245AE2', '#5C5CE3', '#F158A7', '#E8614A', '#8B5A2B']
 const BG_COLORS = ['#F6F6F6', '#EEEDE9', '#FFFFFF', '#1A1A1A', '#FFD5F4', '#C0F6FF', '#EBEFD7', '#F8D647', '#FF4934', '#245AE2', '#4BA334', '#5C5CE3']
@@ -580,7 +581,7 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
               const on = drawing && ink.tool === t.id
               return (
                 <button key={t.id} className={`ink-tool ${on ? 'on' : ''}`} aria-label={t.label} aria-pressed={on} onClick={() => startDraw(t.id)}>
-                  <DitherImg src={t.src} color={on ? '#FF4934' : '#5E5E5E'} size={t.h} scale={1} style={{ height: t.h }} />
+                  <img className="tool-pic" src={t.src} alt="" draggable={false} style={{ height: t.h, marginBottom: -t.sink }} />
                 </button>
               )
             })}

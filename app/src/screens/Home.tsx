@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { haptic } from '../lib/feedback'
 import { ME } from '../lib/samples'
 import { published, useApp } from '../lib/store'
@@ -19,7 +19,6 @@ export default function Home({ active }: { active: boolean }) {
   const zines = useApp(s => s.zines)
   const following = useApp(s => s.following)
   const joined = useApp(s => s.joined)
-  const communities = useApp(s => s.communities)
   const users = useApp(s => s.users)
   const go = useApp(s => s.go)
   const toggleFollow = useApp(s => s.toggleFollow)
@@ -40,7 +39,6 @@ export default function Home({ active }: { active: boolean }) {
     z.publish.postTo && joined.includes(z.publish.postTo) && !following.includes(z.author) ? 'community'
       : following.includes(z.author) ? 'maker' : z.publish.postTo ? 'community' : 'maker'
 
-  const prompts = communities
   const newMakers = users.filter(u => u.id !== ME && !following.includes(u.id))
 
   const onScroll = () => {
@@ -72,16 +70,6 @@ export default function Home({ active }: { active: boolean }) {
         <div key={tab} className="home-feed">
           {tab === 'discover' ? (
             <>
-              <div className="hp-strip hscroll" aria-label="Community prompts">
-                {prompts.map((c, i) => (
-                  <button key={c.id} className="hp-card" onClick={() => go({ name: 'prompt', id: c.id })}
-                    style={{ '--hpc': c.color, '--rot': `${(i % 2 ? 1.6 : -1.4)}deg` } as CSSProperties}>
-                    <span className="hp-tag">#{c.tag} · weekly prompt</span>
-                    <span className="hp-title">{c.prompt.title}</span>
-                    <span className="hp-due">due {c.prompt.due} · {fmtCount(c.perMonth)} zines/mo</span>
-                  </button>
-                ))}
-              </div>
               <MessyGrid zines={discover.slice(0, 6)} tag="none" onOpen={open} scrollY={scrollY} />
               {newMakers.length > 0 && (
                 <section className="new-makers">

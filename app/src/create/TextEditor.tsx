@@ -13,7 +13,7 @@ const FONTS = Object.keys(ZINE_FONTS) as ZineFont[]
 const STYLES: TextStyle[] = ['plain', 'box', 'outline']
 const ALIGNS: TextObj['align'][] = ['center', 'left', 'right']
 const ALIGN_ICON: Record<TextObj['align'], IconName> = { left: 'alignLeft', center: 'alignCenter', right: 'alignRight' }
-const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Permanent Marker"', '"Stardos Stencil"', '"Rubik Mono One"']
+const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Bricolage Grotesque"', '"Stardos Stencil"', '"Rubik Mono One"']
 const RANSOM_BG = ['#FFFFFF', '#F8D647', '#111111', '#FF4934', '#C0F6FF', '#FFD5F4', '#EBEFD7', '#245AE2']
 
 /** Each letter cut from a different magazine. */

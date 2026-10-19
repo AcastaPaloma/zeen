@@ -92,14 +92,21 @@ export function MusicPicker({ open, onClose, value, onChange }: {
         <button className="chip" onClick={() => { music.stop(); onChange(null); onClose() }}>No music</button>
       </div>
 
-      <div className={`record-pile ${album ? 'has-sel' : ''}`} style={{ height: Math.ceil(placed.length / 2) * 232 + 120 }}>
+      {/* while an album is open, any tap on the pile just closes it */}
+      <div className={`record-pile ${album ? 'has-sel' : ''}`} style={{ height: Math.ceil(placed.length / 2) * 232 + 120 }}
+        onClick={() => { if (album) { haptic('tick'); setAlbum(null) } }}>
         {placed.map(({ a, rot, x, y, capRot }) => {
           const on = album === a.id
           const first = sel && sel.album.id === a.id ? sel.track : a.tracks[0]
           return (
             <button key={a.id} className={`record ${on ? 'on' : ''}`}
               style={{ left: `${x}%`, top: y, '--rot': `${rot}deg` } as CSSProperties}
-              onClick={() => { haptic('tap'); setAlbum(on ? null : a.id); if (!on && !(sel && sel.album.id === a.id)) pick(a.tracks[0].id) }}
+              onClick={e => {
+                e.stopPropagation()
+                if (album) { haptic('tick'); setAlbum(null); return }
+                haptic('tap'); setAlbum(a.id)
+                if (!(sel && sel.album.id === a.id)) pick(a.tracks[0].id)
+              }}
               aria-label={`${a.title} by ${a.artist}`} aria-pressed={on}>
               <img src={a.cover} alt="" draggable={false} />
               <span className="record-cap" style={{ transform: `rotate(${capRot}deg)` }}>
@@ -140,7 +147,6 @@ export function MusicPicker({ open, onClose, value, onChange }: {
                 })}
                 <span className="wave-win" style={{ left: `${(start / SPAN) * 100}%`, width: `${(PREVIEW / SPAN) * 100}%` }} />
               </div>
-              <div className="wave-meta"><span>starts at 0:{String(start).padStart(2, '0')}</span><span>15 s preview</span></div>
               <Slider label="Volume" value={volume} onChange={setVolume} format={v => `${v}%`} />
             </>
           )}

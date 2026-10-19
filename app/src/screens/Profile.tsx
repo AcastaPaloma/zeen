@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { trackById } from '../lib/assets'
 import { haptic, isMuted, setMuted, sfx } from '../lib/feedback'
 import { music } from '../lib/music'
 import { ME } from '../lib/samples'
@@ -9,7 +8,6 @@ import type { User, ZineDoc } from '../lib/types'
 import { BottomNav } from '../ui/BottomNav'
 import { Icon, type IconName } from '../ui/Icon'
 import { Button, fmtCount, Sheet } from '../ui/kit'
-import { ZineView } from '../ui/ZineView'
 import { openZine, SocTabs } from './Community'
 import { MessyGrid } from './ZineGrid'
 import './social.css'
@@ -33,44 +31,9 @@ export function HeaderStickers({ stickers }: { stickers: User['stickers'] }) {
   )
 }
 
-export function useMusicState() {
-  const [st, setSt] = useState(music.state)
-  useEffect(() => music.subscribe(setSt), [])
-  return st
-}
-
-export function SongChip({ track }: { track?: string }) {
-  const t = trackById(track)
-  const st = useMusicState()
-  if (!t || !track) return null
-  const playing = st.playing && st.track === track
-  return (
-    <button className="song-chip" onClick={() => { haptic('tick'); music.toggle(track) }} aria-label={`${playing ? 'Pause' : 'Play'} ${t.track.title}`}>
-      <img src={t.album.cover} alt="" className={playing ? 'spin' : ''} />
-      <span>
-        <div className="sc-t">{t.track.title}</div>
-        <div className="sc-a">{t.album.artist}</div>
-      </span>
-      <Icon name={playing ? 'pause' : 'play'} size={16} />
-    </button>
-  )
-}
-
 function MiniThumb({ z, onClick }: { z: ZineDoc; onClick?: () => void }) {
   const src = useThumb(z)
   return src ? <img src={src} alt={z.publish.title} onClick={onClick} /> : null
-}
-
-/** The maker's profile zine, unfolding in place. */
-function ProfileZine({ z }: { z: ZineDoc }) {
-  const go = useApp(s => s.go)
-  return (
-    <div className="pf-zine">
-      <span className="pf-zine-cap">Profile zine · drag the light</span>
-      <button className="icon-btn pf-zine-open" aria-label="Read profile zine" onClick={() => go({ name: 'read', id: z.id })}><Icon name="expand" size={18} /></button>
-      <ZineView doc={z} mode="page" shadow onScene={s => { if (s) { s.fitMargin = 1.5; s.bgParallax = false } }} />
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------- shelf
@@ -215,7 +178,6 @@ function Shelves({ editable }: { editable: boolean }) {
             })}
             {!sh.zines.length && <span className="muted" style={{ fontSize: 12, alignSelf: 'center', paddingBottom: 30 }}>Drop zines here</span>}
           </div>
-          <div className="shelf-plank" />
         </section>
       ))}
       {editable && (
@@ -264,7 +226,6 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
 
   const pins = isMe ? pinned.map(p => zines[p]).filter((z): z is ZineDoc => !!z && z.author === ME) : own.slice(0, 1)
   const rest = own.filter(z => !pins.includes(z))
-  const profileZine = (user.headerZine && zines[user.headerZine]) || pins[0] || own[0]
   const isFollowing = following.includes(user.id)
   const followers = user.followers + (isFollowing && !isMe ? 1 : 0)
   const hdr = user.header || '#222'
@@ -320,12 +281,11 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
             : <Button kind="dark" className={isFollowing ? 'following' : ''} icon={isFollowing ? 'check' : 'users'}
                 onClick={() => { toggleFollow(user.id); haptic('tap'); if (!isFollowing) sfx('pop') }}>{isFollowing ? 'Following' : 'Follow'}</Button>}
         </div>
-        <div className="pf-extras">
-          <SongChip track={user.song} />
-          {(user.links ?? []).map(l => <span key={l} className="link-chip"><Icon name="link" size={13} />{l}</span>)}
-        </div>
-
-        {profileZine && <ProfileZine z={profileZine} />}
+        {(user.links ?? []).length > 0 && (
+          <div className="pf-extras">
+            {(user.links ?? []).map(l => <span key={l} className="link-chip"><Icon name="link" size={13} />{l}</span>)}
+          </div>
+        )}
 
         <SocTabs value={tab} onChange={setTab} options={[{ value: 'own', label: 'Own Work' }, { value: 'collection', label: isMe ? 'Collected' : 'Collected' }]} />
 

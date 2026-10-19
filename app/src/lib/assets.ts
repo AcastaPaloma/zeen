@@ -114,7 +114,7 @@ export function preload(srcs: string[]) { return Promise.all(srcs.map(s => loadI
 
 export const ZINE_FONTS: Record<string, { css: string; label: string }> = {
   typewriter: { css: '"Special Elite", "Courier New", monospace', label: 'Typewriter' },
-  marker: { css: '"Permanent Marker", "Marker Felt", cursive', label: 'Marker' },
+  marker: { css: '"Bricolage Grotesque", "DM Sans", sans-serif', label: 'Bold' },
   grotesk: { css: '"Anton", "Impact", sans-serif', label: 'Grotesk' },
   serif: { css: '"DM Serif Display", Georgia, serif', label: 'Serif' },
   stencil: { css: '"Stardos Stencil", "Impact", sans-serif', label: 'Stencil' },
@@ -125,7 +125,7 @@ export const ZINE_FONTS: Record<string, { css: string; label: string }> = {
 
 export async function loadFonts() {
   if (!('fonts' in document)) return
-  const fams = ['Special Elite', 'Permanent Marker', 'Anton', 'DM Serif Display', 'Stardos Stencil', 'Pinyon Script', 'Rubik Mono One', 'Caveat', 'DM Sans']
+  const fams = ['Special Elite', 'Bricolage Grotesque', 'Anton', 'DM Serif Display', 'Stardos Stencil', 'Pinyon Script', 'Rubik Mono One', 'Caveat', 'DM Sans']
   await Promise.all(fams.map(f => document.fonts.load(`40px "${f}"`).catch(() => null)))
   listeners.forEach(f => f())
 }

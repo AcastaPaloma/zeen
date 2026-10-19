@@ -9,7 +9,7 @@ import type { Crease, Vec2, ZineDoc } from '../lib/types'
 import { FEELS } from '../three/spring'
 import type { PointerInfo, ZineScene } from '../three/ZineScene'
 import { CutGlyph, Icon } from '../ui/Icon'
-import { CheckBtn, DitherImg, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Toggle, VSlider } from '../ui/kit'
+import { CheckBtn, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Toggle, VSlider } from '../ui/kit'
 import type { StepProps } from './Create'
 import { useEditor } from './editor'
 import { KeyframeStrip } from './KeyframeStrip'
@@ -61,7 +61,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
   const endB = useRef<HTMLSpanElement>(null)
   const [kfT, setKfT] = useState(0)
   const [xray, setXray] = useState(false)
-  const [faceSnap, setFaceSnap] = useState(true)
+  const [faceSnap, setFaceSnap] = useState(false)
   const [hand, setHand] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -73,11 +73,20 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
 
   // ---------------------------------------------------------------- scene wiring
 
+  // with no tool, one finger turns the zine freely in 3D. The fold tool keeps a page square to the
+  // camera so a fold line can be drawn straight across it.
   useEffect(() => {
     if (!scene) return
-    scene.snapFaceOn = faceSnap
+    scene.snapFaceOn = faceSnap || tool === 'fold'
     scene.handMode = hand
-  }, [scene, faceSnap, hand])
+    scene.dragOrbit = tool === 'pick'
+    return () => { scene.dragOrbit = false }
+  }, [scene, faceSnap, hand, tool])
+  useEffect(() => {
+    if (!scene || tool !== 'fold') return
+    const f = scene.topFace()
+    if (f) scene.facePanel(f.panel, f.side)
+  }, [scene, tool])
 
   useEffect(() => {
     if (!scene) return
@@ -509,7 +518,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
 
   const pickTool = (t: Tool) => { haptic('tap'); setTool(t); setSel(null); setLast(null); setLastEnds(null) }
   const checkColor = tool === 'fold' ? 'var(--fold)' : 'var(--accent)'
-  const hint = tool === 'cut' ? 'drag to cut!' : tool === 'fold' ? (sub === 'page' ? 'drag a crease to add a page' : 'drag to fold!') : ''
+  const hint = tool === 'cut' ? 'drag to cut!' : tool === 'fold' ? (sub === 'page' ? 'drag a crease to add a page' : 'drag to fold!') : 'drag to turn it around'
   const kfCount = doc.keyframes.length
 
   return (
@@ -565,7 +574,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
       <div className="bottom-stack">
         {hint && <div className="hint-text" key={hint}>{hint}</div>}
         {tool === 'fold' && (
-          <KeyframeStrip doc={doc} active={Math.round(kfT)} onPick={goKeyframe} onAdd={addKeyframe} onPlay={play} playing={playing} />
+          <KeyframeStrip doc={doc} active={Math.round(kfT)} onPick={goKeyframe} onAdd={addKeyframe} onPlay={play} playing={playing} dither />
         )}
         {kfCount > 1 && (
           <Ruler value={kfT} count={kfCount} onChange={t => { setKfT(t); scene?.setAngles(scene.poseAt(t), { animate: false }) }} onRelease={i => goKeyframe(i)} />
@@ -574,10 +583,10 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
           {tool === 'pick' && (
             <>
               <button className="tool-img" aria-label="Cut tool" onClick={() => pickTool('cut')}>
-                <DitherImg src={TOOLS.scissors} color="#5E5E5E" size={92} scale={1} style={{ height: 92 }} />
+                <img className="tool-pic" src={TOOLS.scissors} alt="" draggable={false} style={{ height: 80 }} />
               </button>
               <button className="tool-img" aria-label="Fold tool" onClick={() => pickTool('fold')}>
-                <DitherImg src={TOOLS.bonefolder} color="#5E5E5E" size={92} scale={1} style={{ height: 92, transform: 'rotate(8deg)' }} />
+                <img className="tool-pic" src={TOOLS.bonefolder} alt="" draggable={false} style={{ height: 78 }} />
               </button>
             </>
           )}
@@ -613,7 +622,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         <Row label="Snap" sub="Edges, corners, creases and 15° angles"><Toggle on={cut.snap} onChange={v => ed.setCut({ snap: v })} label="Snap" /></Row>
         <Row label="Ruler" sub="Jagged and round cuts follow a straight line"><Toggle on={cut.ruler} onChange={v => ed.setCut({ ruler: v })} label="Ruler" /></Row>
         <Row label="Top layer only" sub="Cut just the top sheet of a folded stack"><Toggle on={cut.topOnly} onChange={v => ed.setCut({ topOnly: v })} label="Top layer only" /></Row>
-        <Row label="Face-on view" sub="After orbiting, ease to face the nearest page"><Toggle on={faceSnap} onChange={setFaceSnap} label="Face-on view" /></Row>
+        <Row label="Face-on view" sub="After turning it around, ease to face the nearest page"><Toggle on={faceSnap} onChange={setFaceSnap} label="Face-on view" /></Row>
         <Row label="Hand" sub="One finger moves the camera"><Toggle on={hand} onChange={setHand} label="Hand" /></Row>
         <Row label="X-ray" sub="See hidden creases and content"><Toggle on={xray} onChange={setXray} label="X-ray" /></Row>
         <Row label="Reroll last cut" sub="New randomness, same line"><button className="chip" onClick={reroll}><Icon name="dice" size={14} /> Reroll</button></Row>
@@ -627,7 +636,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         </Row>
         <Row label="History"><button className="chip" onClick={() => setHistoryOpen(true)}><Icon name="history" size={14} /> {ed.past.length} steps</button></Row>
         <Row label="Reset view"><button className="chip" onClick={() => { scene?.resetView(); setMore(false) }}>Reset</button></Row>
-        <p className="sheet-tip">Two fingers orbit, pinch to zoom, twist to rotate. Two-finger tap undoes, three-finger tap redoes. Double-tap empty canvas to reset.</p>
+        <p className="sheet-tip">With no tool picked, drag to turn the zine around. With a tool, two fingers turn it, pinch zooms, twist rotates. Two-finger tap undoes, three-finger tap redoes. Double-tap empty canvas to reset.</p>
       </Sheet>
       <HistorySheet open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>

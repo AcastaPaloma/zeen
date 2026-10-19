@@ -360,7 +360,7 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
               </div>
             ) : (
               <>
-                <p className="fin-tip">{warned ? 'Worth a look before you publish. Or keep going, it\'s your zine.' : 'Tap one to jump straight to it.'}</p>
+                {warned && <p className="fin-tip">Worth a look before you publish. Or keep going, it's your zine.</p>}
                 <ul className="flag-list">
                   {flags.map(fl => (
                     <li key={fl.id}>

@@ -3,7 +3,7 @@
 .search-field {
   display: flex; align-items: center; gap: 8px;
   height: 42px; padding: 0 12px;
-  border-radius: 12px;
+  border-radius: 13px;
   border: 1px solid #DCDCDC;
   background: #fff;
   color: var(--mute);
@@ -25,7 +25,7 @@
 .coll-row { gap: 12px; margin: 14px -20px 0; padding: 0 20px 2px; }
 .coll { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--ink); transition: transform var(--t-fast) var(--ease-spring); }
 .coll:active { transform: scale(0.93); }
-.coll-img { width: 76px; height: 76px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: #F6F6F6; transition: box-shadow var(--t-fast); }
+.coll-img { width: 76px; height: 76px; border-radius: 13px; overflow: hidden; display: grid; place-items: center; background: #F6F6F6; transition: box-shadow var(--t-fast); }
 .coll-img img { width: 100%; height: 100%; object-fit: cover; }
 .coll-img.icon { background: #F3F3F3; color: var(--ink-2); }
 .coll.on .coll-img { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
@@ -123,7 +123,7 @@
 
 .music-sheet .sheet-body { position: relative; }
 .music-search { display: flex; gap: 8px; align-items: center; position: sticky; top: 0; z-index: 3; background: #fff; padding: 2px 0 8px; }
-.music-search .chip { height: 42px; border-radius: 12px; }
+.music-search .chip { height: 42px; border-radius: 13px; }
 .record-pile { position: relative; margin: 6px -6px 0; transition: height var(--t-med); }
 .record {
   position: absolute;
@@ -147,7 +147,7 @@
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-radius: 18px;
+  border-radius: 13px;
   box-shadow: var(--shadow-2);
   padding: 12px 14px 8px;
   animation: fade-up 280ms var(--ease-out) both;
@@ -155,7 +155,7 @@
 .tl-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .tl-head b { font-weight: 600; font-size: 14px; }
 .tl-head small { color: var(--mute); font-size: 12px; }
-.tl-row { width: 100%; display: flex; align-items: center; gap: 10px; height: 46px; text-align: left; border-radius: 10px; padding: 0 4px; transition: background var(--t-fast); }
+.tl-row { width: 100%; display: flex; align-items: center; gap: 10px; height: 46px; text-align: left; border-radius: 13px; padding: 0 4px; transition: background var(--t-fast); }
 .tl-row img, .tl-row .dither-img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; flex: none; }
 .tl-row span:not(.eq) { flex: 1; font-size: 14px; color: #A0A0A0; transition: color var(--t-fast); }
 .tl-row small { color: var(--mute-2); font-size: 11px; }
@@ -167,18 +167,17 @@
 .eq i:nth-child(3) { animation-delay: -400ms; }
 @keyframes eq { 0%, 100% { height: 4px; } 50% { height: 14px; } }
 
-.wave { position: relative; display: flex; align-items: center; gap: 2px; height: 46px; margin: 10px 0 2px; touch-action: none; cursor: ew-resize; }
+.wave { position: relative; display: flex; align-items: center; gap: 2px; height: 46px; margin: 10px 0 8px; touch-action: none; cursor: ew-resize; }
 .wave > span:not(.wave-win) { flex: 1; background: #D6D6D6; border-radius: 2px; min-height: 3px; transition: background var(--t-fast); }
 .wave > span.in { background: var(--accent); }
 .wave-win { position: absolute; top: -3px; bottom: -3px; border-radius: 8px; box-shadow: inset 0 0 0 2px var(--ink); pointer-events: none; transition: left 80ms linear; }
-.wave-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--mute); margin-bottom: 2px; }
 
 .now-playing {
   position: sticky; bottom: 0; z-index: 4;
   display: flex; align-items: center; gap: 10px;
   height: 66px; padding: 0 10px;
   margin-top: -66px;
-  border-radius: 18px;
+  border-radius: 13px;
   background: linear-gradient(90deg, #fff 55%, #FFFBD9);
   box-shadow: var(--shadow-2);
   transform: translateY(130%);
@@ -189,7 +188,7 @@
 .np-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .np-text b { font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .np-text small { color: var(--mute); font-size: 13px; }
-.now-playing button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--ink); border-radius: 12px; transition: transform var(--t-fast) var(--ease-spring); }
+.now-playing button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--ink); border-radius: 13px; transition: transform var(--t-fast) var(--ease-spring); }
 .now-playing button:active { transform: scale(0.88); }
 .np-go { background: var(--ink); color: #fff !important; }
 
@@ -199,7 +198,7 @@
 .fx-strip { gap: 10px; margin: 0 -20px; padding: 4px 20px 8px; }
 .fx-tile { flex: none; width: 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--mute); transition: transform var(--t-fast) var(--ease-spring), color var(--t-fast); }
 .fx-tile:active { transform: scale(0.93); }
-.fx-img { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; background: #EEE; transition: box-shadow var(--t-fast); }
+.fx-img { position: relative; width: 84px; height: 84px; border-radius: 13px; overflow: hidden; background: #EEE; transition: box-shadow var(--t-fast); }
 .fx-img img { width: 100%; height: 100%; object-fit: cover; display: block; animation: fade-in 260ms ease both; }
 .fx-ph { position: absolute; inset: 0; background: linear-gradient(110deg, #EEE 30%, #F7F7F7 50%, #EEE 70%); background-size: 200% 100%; animation: shimmer 1s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
@@ -288,7 +287,7 @@ canvas.layer-thumb { image-rendering: auto; }
 .te-tools { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px; padding: 0 14px; transition: bottom 200ms var(--ease-out); }
 .te-fonts, .te-colors { gap: 8px; margin: 0 -14px; padding: 6px 14px 4px; }
 .te-font {
-  flex: none; min-width: 64px; height: 56px; border-radius: 12px; padding: 0 10px;
+  flex: none; min-width: 64px; height: 56px; border-radius: 13px; padding: 0 10px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 19px;
   transition: background var(--t-fast), transform var(--t-fast) var(--ease-spring), color var(--t-fast);

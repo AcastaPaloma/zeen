@@ -123,7 +123,10 @@ function Stepper({ step, onJump }: { step: CreateStep; onJump: (s: CreateStep) =
 // ---------------------------------------------------------------- start
 
 const TEMPLATES: { id: TemplateId; label: string }[] = [
-  { id: 'half', label: 'Half fold' },
+  { id: 'half', label: '4-page' },
+  { id: 'book8', label: '8-page' },
+  { id: 'book12', label: '12-page' },
+  { id: 'book16', label: '16-page' },
   { id: 'gatefold', label: 'Gatefold' },
   { id: 'accordion', label: 'Accordion' },
   { id: 'trifold', label: 'Tri-fold' },
@@ -139,6 +142,19 @@ const STOCKS: { id: PaperStock; label: string; img?: string }[] = [
   { id: 'construction', label: 'Construction', img: PAPER.watercolor },
 ]
 
+/** An open booklet with fanned pages on the left. */
+function Booklet({ leaves }: { leaves: number }) {
+  return (
+    <>
+      <path d="M22 9 36 6v28l-14 3Z" />
+      {Array.from({ length: leaves }, (_, i) => {
+        const x = 9 + i * 2.2
+        return <path key={i} d={`M22 9 ${x} ${6 + i * 0.6}v28l${22 - x} ${3 - i * 0.6}`} />
+      })}
+    </>
+  )
+}
+
 function TemplateGlyph({ id }: { id: TemplateId }) {
   const g = {
     half: <><path d="M14 10 26 6v30l-12 4Z" /><path d="M26 6l10 5v29l-10-4" /><path d="M14 40 26 36" strokeDasharray="2 2" /></>,
@@ -146,6 +162,9 @@ function TemplateGlyph({ id }: { id: TemplateId }) {
     accordion: <><path d="M4 12l9-4v26l-9 4Z" /><path d="M13 8l9 4v26l-9-4" /><path d="M22 12l9-4v26l-9 4Z" /><path d="M31 8l9 4v26l-9-4" /></>,
     trifold: <><path d="M8 12 20 8v26L8 38Z" /><path d="M20 8l12 4v26l-12-4" /><path d="M32 12l8-6v26l-8 6" /></>,
     blank: <path d="M10 8h24v30H10Z" />,
+    book8: <Booklet leaves={2} />,
+    book12: <Booklet leaves={3} />,
+    book16: <Booklet leaves={4} />,
   }[id]
   return (
     <svg viewBox="0 0 44 44" width={52} height={52} fill="none" stroke="#1A1A1A" strokeWidth={1.3} strokeLinejoin="round" aria-hidden>

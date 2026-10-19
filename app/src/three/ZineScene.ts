@@ -80,6 +80,8 @@ export class ZineScene {
   fitMargin: number | null = null
   /** in page mode, a one-finger swipe on empty canvas turns the zine over (Read) */
   oneFingerSwipe = true
+  /** in free mode, a one-finger drag the tool doesn't claim orbits the camera (Cut & Fold with no tool) */
+  dragOrbit = false
   private hintPending = false
   /** called with the visible side whenever the zine turns over */
   side: Side = 'front'
@@ -93,6 +95,9 @@ export class ZineScene {
   zoom = 1
   pan = new Vector2()
   center = new Vector3()
+  /** the zine's own centre (unrotated); the view rotates about it so turning and orbiting stay in place */
+  pivot = new Vector3()
+  private pivotReady = false
   dist = 60
   fitReady = false
   tiltX = new Spring(0, 140, 16)
@@ -481,6 +486,20 @@ export class ZineScene {
     // fit: bounds of the focused geometry in view space. While shaping paper the framing holds still
     // under the finger and only eases to the new shape once nothing is moving.
     const holding = this.mode === 'free' && this.fitReady && (this.pointers.size > 0 || !!this.drag || this.isMoving() || !this.qAnim.done)
+    // rotate about the zine's centre, not the sheet's origin. The pivot only moves while the view is
+    // settled, and the camera shifts with it so nothing jumps on screen.
+    if (!holding || !this.pivotReady) {
+      const c = this.localCenter()
+      if (c) {
+        if (this.pivotReady) {
+          const d = this.pivot.clone().sub(c).applyQuaternion(qv)
+          this.center.x += d.x; this.center.y += d.y
+        }
+        this.pivot.copy(c)
+        this.pivotReady = true
+      }
+    }
+    this.root.position.copy(this.pivot).applyQuaternion(qv).negate()
     const b = holding ? null : this.viewBounds(qv)
     if (b) {
       const tan = Math.tan((FOV * Math.PI) / 360)
@@ -510,7 +529,7 @@ export class ZineScene {
       const m = this.mats.get(id)
       if (!P || !m) continue
       for (const poly of P.region) for (const p of poly[0]) {
-        v.set(p[0], p[1], 0).applyMatrix4(m).applyQuaternion(q)
+        v.set(p[0], p[1], 0).applyMatrix4(m).applyQuaternion(q).add(this.root.position)
         if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x
         if (v.y < y0) y0 = v.y; if (v.y > y1) y1 = v.y
         if (v.z > zmax) zmax = v.z
@@ -518,6 +537,23 @@ export class ZineScene {
     }
     if (!isFinite(x0)) return null
     return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0, zmax }
+  }
+
+  /** Centre of the folded zine's bounding box, before the view rotation. */
+  private localCenter() {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
+    const v = new Vector3()
+    for (const P of this.d.list) {
+      const m = this.mats.get(P.id)
+      if (!m || !P.region.length) continue
+      for (const poly of P.region) for (const p of poly[0]) {
+        v.set(p[0], p[1], 0).applyMatrix4(m)
+        if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x
+        if (v.y < y0) y0 = v.y; if (v.y > y1) y1 = v.y
+        if (v.z < z0) z0 = v.z; if (v.z > z1) z1 = v.z
+      }
+    }
+    return isFinite(x0) ? new Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) : null
   }
 
   /** Panels in the same plane as `panel` that face the viewer: the spread you see when a page is focused. */
@@ -1085,7 +1121,7 @@ export class ZineScene {
       const mouseOrbit = e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || e.altKey)
       if (!mouseOrbit && !this.handMode && this.handlers.toolStart?.(this.info(e.pointerId, x, y, e.button))) {
         this.gesture = 'tool'
-      } else if (mouseOrbit || this.handMode || this.mode === 'preview') {
+      } else if (mouseOrbit || this.handMode || this.mode === 'preview' || (this.mode === 'free' && this.dragOrbit)) {
         this.gesture = 'cam1'
       } else {
         this.gesture = this.mode === 'page' && this.oneFingerSwipe ? 'swipe' : 'none'
