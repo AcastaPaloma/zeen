@@ -5,6 +5,8 @@ import App from './App'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <div className="phone-preview">
+      <App />
+    </div>
   </StrictMode>,
 )
