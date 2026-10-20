@@ -1,7 +1,7 @@
 import {
-  area, clipLine, difference, intersect, pointInMulti, strokePolygon, transformMulti, uid, union,
+  area, clipLine, cross, difference, dist, dot, intersect, norm, pointInMulti, sideOf, strokePolygon, sub, transformMulti, uid, union,
 } from '../lib/geom'
-import { flapOf, frameFor, leafOutline, pathClosures, splitAreas } from '../lib/paper'
+import { derive, flapOf, frameFor, leafOutline, pathClosures, splitAreas, type Derived } from '../lib/paper'
 import type { Crease, MultiPoly, Polygon, Surface, Vec2, ZineDoc } from '../lib/types'
 import type { ZineScene } from '../three/ZineScene'
 
@@ -50,9 +50,12 @@ export function applyCut(scene: ZineScene, doc: ZineDoc, panel: string, path: Ve
     }
     if (aL < 0.05 || aR < 0.05) return null // the line missed the paper
     const [keepSmall, keepBig] = aL < aR ? [L, R] : [R, L]
+    // and anything the cut leaves hanging on nothing falls away with the piece
+    const main = withoutFloating(removeRegions(doc, d, keepSmall))
+    const alt = withoutFloating(removeRegions(doc, d, keepBig))
     return {
-      doc: removeRegions(doc, d, keepSmall), alt: removeRegions(doc, d, keepBig),
-      pieces: keepSmall, altPieces: keepBig, kind: 'through',
+      doc: main.doc, alt: alt.doc,
+      pieces: [...keepSmall, ...main.pieces], altPieces: [...keepBig, ...alt.pieces], kind: 'through',
     }
   }
 
@@ -67,7 +70,102 @@ export function applyCut(scene: ZineScene, doc: ZineDoc, panel: string, path: Ve
     if (s.length) cuts.push({ panel: id, region: s })
   }
   if (!cuts.length) return null
-  return { doc: removeRegions(doc, d, cuts), alt: null, pieces: [], altPieces: [], kind: 'slit' }
+  // a slit can still cut a bit of paper free (across a narrow neck, or along a hinge): that falls away too
+  const res = withoutFloating(removeRegions(doc, d, cuts))
+  return { doc: res.doc, alt: null, pieces: res.pieces, altPieces: [], kind: 'slit' }
+}
+
+// ---------------------------------------------------------------- floating paper
+
+/** How close to a hinge line a paper edge must run to count as on it, and how much of it must be shared. */
+const HINGE_TOL = 1e-3
+const HINGE_MIN = 0.05
+
+/**
+ * Pieces of paper joined to nothing. Every panel's paper is split into its separate pieces; a piece is joined
+ * to a piece of its parent panel where both run along the hinge between them for a stretch. Whatever isn't
+ * joined, however indirectly, to the biggest body of paper is floating.
+ */
+export function floatingPieces(d: Derived): { panel: string; region: MultiPoly }[] {
+  const nodes: { panel: string; poly: Polygon; area: number }[] = []
+  const byPanel = new Map<string, number[]>()
+  for (const P of d.list) {
+    const ids: number[] = []
+    for (const poly of P.region) {
+      const a = area([poly])
+      if (a < 1e-4) continue
+      ids.push(nodes.length)
+      nodes.push({ panel: P.id, poly, area: a })
+    }
+    byPanel.set(P.id, ids)
+  }
+  if (nodes.length < 2) return []
+  const up = nodes.map((_, i) => i)
+  const find = (i: number): number => (up[i] === i ? i : (up[i] = find(up[i])))
+  // the stretches of a piece's edge that run along a line, as [from, to] along it
+  const along = (poly: Polygon, a: Vec2, b: Vec2) => {
+    const u = norm(sub(b, a))
+    const out: [number, number][] = []
+    for (const ring of poly) for (let i = 0; i < ring.length; i++) {
+      const p = ring[i], q = ring[(i + 1) % ring.length]
+      if (Math.abs(cross(u, sub(p, a))) > HINGE_TOL || Math.abs(cross(u, sub(q, a))) > HINGE_TOL) continue
+      const t0 = dot(sub(p, a), u), t1 = dot(sub(q, a), u)
+      out.push([Math.min(t0, t1), Math.max(t0, t1)])
+    }
+    return out
+  }
+  const shared = (A: [number, number][], B: [number, number][]) =>
+    A.some(([a0, a1]) => B.some(([b0, b1]) => Math.min(a1, b1) - Math.max(a0, b0) > HINGE_MIN))
+  for (const C of d.list) {
+    if (!C.parent || !C.hinge) continue
+    const h = d.creases.get(C.hinge)
+    if (!h) continue
+    const parents = (byPanel.get(C.parent) ?? []).map(j => ({ j, s: along(nodes[j].poly, h.a, h.b) }))
+    for (const i of byPanel.get(C.id) ?? []) {
+      const s = along(nodes[i].poly, h.a, h.b)
+      if (!s.length) continue
+      for (const p of parents) if (shared(s, p.s)) up[find(i)] = find(p.j)
+    }
+  }
+  const total = new Map<number, number>()
+  const rooted = new Set<number>()
+  nodes.forEach((n, i) => {
+    total.set(find(i), (total.get(find(i)) ?? 0) + n.area)
+    if (!d.panels.get(n.panel)?.parent) rooted.add(find(i))
+  })
+  // the biggest body stays; a near tie goes to the one holding the base sheet, so its folds keep something to hang from
+  let body = -1, best = -1
+  for (const [r, a] of total) {
+    const tie = Math.abs(a - best) <= best * 0.02
+    if ((!tie && a > best) || (tie && rooted.has(r) && !rooted.has(body))) { best = Math.max(a, best); body = r }
+  }
+  const out = new Map<string, MultiPoly>()
+  nodes.forEach((n, i) => {
+    if (find(i) === body) return
+    const l = out.get(n.panel) ?? []
+    l.push(n.poly)
+    out.set(n.panel, l)
+  })
+  return [...out].map(([panel, region]) => ({ panel, region }))
+}
+
+/** Take away any floating paper (see floatingPieces), and the leaves and folds that are left with none. */
+export function withoutFloating(doc: ZineDoc): { doc: ZineDoc; pieces: { panel: string; region: MultiPoly }[] } {
+  const d = derive(doc)
+  const pieces = floatingPieces(d)
+  let nd = pieces.length ? removeRegions(doc, d, pieces) : doc
+  // a leaf with no paper left goes, with its hinge, its folds and its collage; a fold with nothing left on its
+  // flap goes too, so no handle is left hanging off thin air
+  for (let guard = 0; guard < 24; guard++) {
+    const dd = derive(nd)
+    const bare = nd.creases.find(c => {
+      if (c.leaf) return area(nd.surfaces.find(x => x.id === c.leaf)?.outline ?? []) < 0.01
+      return area(dd.panels.get(flapOf(c))?.region ?? []) < 0.01
+    })
+    if (!bare) break
+    nd = deleteCrease(nd, bare.id)
+  }
+  return { doc: nd, pieces }
 }
 
 function removeRegions(doc: ZineDoc, d: ZineScene['d'], parts: { panel: string; region: MultiPoly }[]): ZineDoc {
@@ -88,34 +186,96 @@ function removeRegions(doc: ZineDoc, d: ZineScene['d'], parts: { panel: string; 
   return { ...doc, surfaces }
 }
 
-/** Fold `panel` along the line through A–B (flat coords). The side with less paper folds toward the camera. */
-export function applyFold(scene: ZineScene, doc: ZineDoc, panel: string, A: Vec2, B: Vec2, flip = false): { doc: ZineDoc; crease: Crease } | null {
-  const P = scene.d.panels.get(panel)
-  if (!P) return null
+export type FoldPlan = { seg: [Vec2, Vec2]; flapSide: 1 | -1 } | { error: 'cross' | 'same' }
+
+/** How far from a fold line (flat units) a hinge end still counts as on it. */
+const ON_LINE = 0.05
+
+/**
+ * Where a fold along the line through A–B (flat coords) can go on `panel`. A fold only ever creases: it never
+ * tears paper from what it's joined to. So the line may not run through a binding (the hinge the panel hangs
+ * from, or the hinge of a fold or leaf hanging off it), just as a book's page can't be folded across its
+ * spine, and the side holding the bindings stays put while the free side swings, however big it is.
+ * With nothing bound (a loose sheet, or bindings on both sides) the side with less paper folds.
+ */
+export function foldPlan(d: Derived, panel: string, A: Vec2, B: Vec2): FoldPlan | null {
+  const P = d.panels.get(panel)
+  if (!P || dist(A, B) < 1e-6) return null
   const seg = clipLine(A, B, P.region)
   if (!seg) return null
+  const len = dist(seg[0], seg[1])
+  if (len < 1e-6) return null
+  // signed distance from the line, + on the left (flapSide +1)
+  const off = (p: Vec2) => sideOf(seg[0], seg[1], p) / len
+  const own = P.hinge ? d.creases.get(P.hinge) : undefined
+  const kids = d.list.filter(C => C.parent === P.id && C.hinge).map(C => d.creases.get(C.hinge!)!)
+  const sideOfHinge = (h: { a: Vec2; b: Vec2 }) => {
+    const oa = off(h.a), ob = off(h.b)
+    if ((oa > ON_LINE && ob < -ON_LINE) || (oa < -ON_LINE && ob > ON_LINE)) return 'cross' as const
+    const o = Math.abs(oa) > Math.abs(ob) ? oa : ob
+    return Math.abs(o) <= ON_LINE ? ('same' as const) : o > 0 ? 1 : -1
+  }
+  const ownSide = own ? sideOfHinge(own) : 0
+  const kidSides = kids.map(sideOfHinge)
+  for (const k of [ownSide, ...kidSides]) if (k === 'cross') return { error: 'cross' }
   const { L, R } = splitAreas(P.region, seg[0], seg[1])
-  if (Math.min(L, R) < 0.3) return null
+  if (Math.min(L, R) < 0.3) return [ownSide, ...kidSides].includes('same') ? { error: 'same' } : null
   let flapSide: 1 | -1 = L < R ? 1 : -1
-  if (flip) flapSide = (-flapSide) as 1 | -1
-  const dir: 1 | -1 = scene.facesCamera(panel) ? 1 : -1
-  const crease: Crease = { id: uid('c'), panel, a: seg[0], b: seg[1], flapSide, dir, angle: 180 }
-  return { doc: { ...doc, creases: [...doc.creases, crease] }, crease }
+  const bound = new Set(kidSides.filter(k => k !== 'same'))
+  if (ownSide === 1 || ownSide === -1) flapSide = (-ownSide) as 1 | -1
+  else if (bound.size === 1) flapSide = (-[...bound][0]) as 1 | -1
+  return { seg, flapSide }
 }
 
-/** Ghost region for a fold preview: the part of the panel that would swing. */
-export function foldPreview(scene: ZineScene, panel: string, A: Vec2, B: Vec2) {
-  const P = scene.d.panels.get(panel)
+/**
+ * The flap side a crease is allowed: the one away from what holds its panel in place (its own hinge, and the
+ * folds and leaves its panel carries along that line), or null when either side may swing.
+ */
+export function freeSide(d: Derived, c: Crease): 1 | -1 | null {
+  const P = d.panels.get(c.panel)
   if (!P) return null
-  const seg = clipLine(A, B, P.region)
-  if (!seg) return null
-  const { L, R } = splitAreas(P.region, seg[0], seg[1])
-  if (Math.min(L, R) < 0.3) return null
-  const flapSide: 1 | -1 = L < R ? 1 : -1
+  const len = dist(c.a, c.b) || 1
+  const side = (h: Crease) => {
+    const oa = sideOf(c.a, c.b, h.a) / len, ob = sideOf(c.a, c.b, h.b) / len
+    const o = Math.abs(oa) > Math.abs(ob) ? oa : ob
+    return Math.abs(o) > ON_LINE ? Math.sign(o) : 0
+  }
+  if (P.hinge) { const s = side(d.creases.get(P.hinge)!); if (s) return (-s) as 1 | -1 }
+  // what else hangs off this panel, whichever side of the crease it's on now
+  const flap = flapOf(c)
+  const sides = new Set<number>()
+  for (const C of d.list) {
+    if (C.id === flap || !C.hinge) continue
+    const h = d.creases.get(C.hinge)!
+    if (h.panel !== P.id || (C.parent !== P.id && C.parent !== flap)) continue
+    const s = side(h)
+    if (s) sides.add(s)
+  }
+  return sides.size === 1 ? ((-[...sides][0]) as 1 | -1) : null
+}
+
+/** Fold `panel` along the line through A–B (see foldPlan). `d` is the paper as it was before this fold. */
+export function applyFold(d: Derived, doc: ZineDoc, scene: ZineScene, panel: string, A: Vec2, B: Vec2): { doc: ZineDoc; crease: Crease } | { error: 'cross' | 'same' | 'tear' } | null {
+  const plan = foldPlan(d, panel, A, B)
+  if (!plan || 'error' in plan) return plan
   const dir: 1 | -1 = scene.facesCamera(panel) ? 1 : -1
-  const crease: Crease = { id: '__ghost', panel, a: seg[0], b: seg[1], flapSide, dir, angle: 180 }
-  const hp: Polygon = halfPlanePoly(seg[0], seg[1], flapSide)
-  return { crease, region: intersect(P.region, hp), seg }
+  const crease: Crease = { id: uid('c'), panel, a: plan.seg[0], b: plan.seg[1], flapSide: plan.flapSide, dir, angle: 180 }
+  const nd = { ...doc, creases: [...doc.creases, crease] }
+  // last line of defence: a fold that would leave any paper joined to nothing is a tear, not a fold
+  const loose = (x: ZineDoc) => floatingPieces(derive(x)).reduce((s, p) => s + area(p.region), 0)
+  if (loose(nd) > loose(doc) + 0.01) return { error: 'tear' }
+  return { doc: nd, crease }
+}
+
+/** Ghost region for a fold preview: the part of the panel that would swing (or why there's no fold there). */
+export function foldPreview(d: Derived, scene: ZineScene, panel: string, A: Vec2, B: Vec2) {
+  const P = d.panels.get(panel)
+  const plan = P ? foldPlan(d, panel, A, B) : null
+  if (!P || !plan || 'error' in plan) return plan
+  const dir: 1 | -1 = scene.facesCamera(panel) ? 1 : -1
+  const crease: Crease = { id: '__ghost', panel, a: plan.seg[0], b: plan.seg[1], flapSide: plan.flapSide, dir, angle: 180 }
+  const hp: Polygon = halfPlanePoly(plan.seg[0], plan.seg[1], plan.flapSide)
+  return { crease, region: intersect(P.region, hp), seg: plan.seg }
 }
 
 function halfPlanePoly(a: Vec2, b: Vec2, side: 1 | -1): Polygon {

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { boxCorners, objectAt, objectBox, objectImage } from '../create/collageUtil'
+import { isGifScrap } from '../lib/compose'
 import { haptic, isMuted, setMuted, sfx } from '../lib/feedback'
 import { music } from '../lib/music'
 import { flatToPage } from '../lib/paper'
@@ -80,22 +81,42 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const tNow = useRef(t)
   tNow.current = t
   const glide = useRef(0)
+  // the keyframe strip rides along with the ruler (see stripPos below). A glide also eases the strip back from
+  // wherever it was swiped to, so picking a thumbnail scrolls the whole strip until that one's in the middle.
+  const stripGlide = useRef<{ off: number } | null>(null)
+  const stripPos = useCallback((v: number) => {
+    const el = strip.current
+    const n = el?.children.length ?? 0
+    if (!el || !n) return null
+    const i0 = Math.max(0, Math.min(n - 1, Math.floor(v))), i1 = Math.min(n - 1, i0 + 1)
+    const r = el.getBoundingClientRect()
+    const mid = (i: number) => { const b = el.children[i].getBoundingClientRect(); return b.left - r.left + el.scrollLeft + b.width / 2 }
+    // the point between the thumbnails either side of v, so the strip scrolls as smoothly as the ruler
+    const c = mid(i0) + (mid(i1) - mid(i0)) * Math.max(0, Math.min(1, v - i0))
+    return c - el.clientWidth / 2
+  }, [])
   const glideT = useCallback((to: number) => {
     cancelAnimationFrame(glide.current)
     const from = tNow.current, t0 = performance.now()
+    const el = strip.current, p = stripPos(from)
+    const g = (stripGlide.current = { off: el && p !== null ? el.scrollLeft - p : 0 })
     const step = (now: number) => {
-      const k = Math.min(1, (now - t0) / 420)
-      setT(from + (to - from) * (1 - (1 - k) ** 3))
+      const k = Math.min(1, (now - t0) / 420), e = 1 - (1 - k) ** 3
+      const v = from + (to - from) * e
+      setT(v)
+      const q = stripPos(v)
+      if (el && q !== null) el.scrollLeft = q + g.off * (1 - e)
       if (k < 1) glide.current = requestAnimationFrame(step)
+      else stripGlide.current = null
     }
     glide.current = requestAnimationFrame(step)
-  }, [])
+  }, [stripPos])
   useEffect(() => () => cancelAnimationFrame(glide.current), [])
 
   const goTo = useCallback((k: number, opts: { animate?: boolean; glide?: boolean } = {}) => {
     if (!scene || !doc) return
     k = Math.max(0, Math.min(last, Math.round(k)))
-    if (opts.glide) glideT(k); else { cancelAnimationFrame(glide.current); setT(k) }
+    if (opts.glide) glideT(k); else { cancelAnimationFrame(glide.current); stripGlide.current = null; setT(k) }
     scene.setAngles(fullPose(k), { animate: opts.animate !== false, feel, sequential: doc.transition.mode === 'sequential' })
     setReadProgress(id, k)
     clearTimeout(endTimer.current)
@@ -154,28 +175,27 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   useEffect(() => () => clearTimeout(endTimer.current), [])
 
   // keep the current keyframe's thumbnail in the middle of the strip, over the ruler's playhead
-  const kfNow = Math.round(t)
-  const kfShown = useRef(kfNow)
-  kfShown.current = kfNow
-  const centreThumb = useCallback((smooth: boolean) => {
-    const el = strip.current
-    const on = el?.children[kfShown.current] as HTMLElement | undefined
-    if (!el || !on) return
-    const r = el.getBoundingClientRect(), b = on.getBoundingClientRect()
-    el.scrollTo({ left: el.scrollLeft + (b.left + b.width / 2) - (r.left + r.width / 2), behavior: smooth ? 'smooth' : 'auto' })
-  }, [])
-  useEffect(() => { centreThumb(true) }, [kfNow, centreThumb])
+  // (a glide moves the strip itself, along with easing it back from a swipe)
+  useLayoutEffect(() => {
+    const el = strip.current, p = stripPos(t)
+    if (el && p !== null && !stripGlide.current) el.scrollLeft = p
+  }, [t, stripPos])
   // thumbnails render in after mount and change width: keep the current one centred as they do
   useEffect(() => {
     const el = strip.current
     if (!el) return
-    const ro = new ResizeObserver(() => centreThumb(false))
+    const ro = new ResizeObserver(() => {
+      const p = stripPos(tNow.current)
+      if (p !== null && !stripGlide.current) el.scrollLeft = p
+    })
     for (const c of el.children) ro.observe(c)
     return () => ro.disconnect()
-  }, [kfs.length, centreThumb])
+  }, [kfs.length, stripPos])
 
   const scrub = (v: number) => {
     if (!scene) return
+    cancelAnimationFrame(glide.current)
+    stripGlide.current = null
     setT(v)
     setEndOpen(false)
     scene.setAngles(scene.poseAt(v), { feel: { k: 420, c: 42 } })
@@ -236,7 +256,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       id: sid, src, name, note: `saved while reading “${doc.publish.title || 'Untitled'}”`,
       collection: 'Saved from zines', addedAt: Date.now(), addedBy: ME,
       from: `"${doc.publish.title || 'Untitled'}"${maker ? ` by ${maker.name}` : ''}`, where: 'Zeen',
-      edition: [1, 1], usedIn: [doc.id], gif: o.kind === 'scrap' && !!o.gif, kind: o.kind === 'scrap' && o.gif ? 'gif' : 'image',
+      edition: [1, 1], usedIn: [doc.id], gif: o.kind === 'scrap' && isGifScrap(o), kind: o.kind === 'scrap' && isGifScrap(o) ? 'gif' : 'image',
     }
     useApp.getState().addScraps([item])
     // fly the object itself from where it sits on the page

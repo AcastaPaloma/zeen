@@ -267,7 +267,7 @@ export function Ruler({ value, count, onChange, onRelease, dimmed }: {
   )
 }
 
-export function Sheet({ open, onClose, children, title, height = 'auto', className = '', dim = false, noGrab, header, from = null, keep = false }: {
+export function Sheet({ open, onClose, children, title, height = 'auto', className = '', dim = false, noGrab, header, from = null, keep = false, pull = null }: {
   open: boolean; onClose: () => void; children: ReactNode; title?: ReactNode; height?: 'auto' | 'half' | 'tall' | 'full'; className?: string; dim?: boolean; noGrab?: boolean; header?: ReactNode
   /**
    * Grow out of a field elsewhere on screen (client y of its top edge): the sheet starts as just its own
@@ -276,6 +276,11 @@ export function Sheet({ open, onClose, children, title, height = 'auto', classNa
   from?: number | null
   /** stay in the page (offscreen) while closed, so a tap can focus a field inside it straight away */
   keep?: boolean
+  /**
+   * While a pull-up tab is being dragged: how much of the sheet (px from the bottom) follows the finger into
+   * view. Back to null, it either carries on open (if `open` turned true) or slides away again.
+   */
+  pull?: number | null
 }) {
   const [mounted, setMounted] = useState(open)
   const [shown, setShown] = useState(false)
@@ -324,6 +329,18 @@ export function Sheet({ open, onClose, children, title, height = 'auto', classNa
     if (open) { setMounted(true); requestAnimationFrame(() => requestAnimationFrame(() => setShown(true))) }
     else { setShown(false); const t = setTimeout(() => setMounted(false), 320); return () => clearTimeout(t) }
   }, [open])
+  // a pull hands over to open or closed from wherever the finger left the sheet, without a jump
+  const pulled = pull !== null
+  const wasPulled = useRef(false)
+  useLayoutEffect(() => {
+    const was = wasPulled.current
+    wasPulled.current = pulled
+    if (pulled) { setMounted(true); return }
+    if (!was) return
+    if (open) { setShown(true); return }
+    const t = setTimeout(() => setMounted(false), 320)
+    return () => clearTimeout(t)
+  }, [pulled, open])
   if (!mounted && !keep) return null
   const grab = {
     onPointerDown: (e: React.PointerEvent) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); start.current = { y: e.clientY, t: performance.now() } },
@@ -340,7 +357,8 @@ export function Sheet({ open, onClose, children, title, height = 'auto', classNa
     <>
       {dim && mounted && <div className={`sheet-dim ${shown ? 'on' : ''}`} onClick={onClose} />}
       <div ref={box} className={`sheet sheet-${height} ${shown ? 'on' : ''} ${className}`} role="dialog" aria-label={typeof title === 'string' ? title : undefined}
-        aria-hidden={!mounted} style={dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : undefined}>
+        aria-hidden={!mounted}
+        style={pulled ? { transform: `translateY(max(0px, calc(100% - ${pull}px)))`, transition: 'none' } : dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : undefined}>
         {!noGrab && <div className="sheet-grab" {...grab}><span /></div>}
         {(title || header) && <div className="sheet-head" {...grab}>{header ?? <h3>{title}</h3>}</div>}
         <div className="sheet-body">{children}</div>

@@ -4,8 +4,9 @@ export const STICKERS = [
   'glitter-heart', 'glitter-smiley', 'gem-rainbow', 'glitter-apple', 'gem-flower', 'gem-heart', 'flower-smile', 'pink-stars',
 ].map(n => ({ id: 'st-' + n, src: `${A}/stickers/${n}.webp`, name: n.replace(/-/g, ' ') }))
 
-export const SCRAPS = [
-  ['hiss-cat', 'Hissy Cat', 'not in the mood'],
+/** [file, name, note, and 'gif' for the ones that move] */
+export const SCRAPS = ([
+  ['hiss-cat', 'Hissy Cat', 'not in the mood', 'gif'],
   ['bird-blue', 'Cool Bird Alert', 'bird i found on pinterest'],
   ['bird-yellow', 'Skater Budgie', 'kickflip king'],
   ['chick', 'Lil Chick', 'smallest skater in the park'],
@@ -22,7 +23,10 @@ export const SCRAPS = [
   ['grass', 'Grass', 'go outside'],
   ['moodboard', 'Moodboard', 'brainstorm wall'],
   ['brush-stroke', 'Ink Swoosh', 'sumi brush'],
-].map(([n, name, note]) => ({ id: 'sc-' + n, src: `${A}/scraps/${n}.webp`, name, note }))
+] as string[][]).map(([n, name, note, gif]) => ({ id: 'sc-' + n, src: `${A}/scraps/${n}.${gif ? 'gif' : 'webp'}`, name, note, gif: !!gif }))
+
+/** Scraps that used to be stills and are GIFs now: old placements follow along (see the store's init). */
+export const RENAMED_SCRAPS: Record<string, string> = { [`${A}/scraps/hiss-cat.webp`]: `${A}/scraps/hiss-cat.gif` }
 
 export const COVERS: Record<string, string> = Object.fromEntries(
   ['levels', 'how-zeen', 'montreal', 'yellow-silhouettes', 'forever-young', 'june', 'same-pace', 'svsd', 'svsd-spread']

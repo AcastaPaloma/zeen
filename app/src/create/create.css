@@ -58,8 +58,27 @@
 
 /* make room for the toolbar where it's docked */
 .create[data-dock="bottom"] .bottom-stack { padding-bottom: calc(var(--safe-bottom) + 12px + 59.2 * var(--u)); }
+
+/* collage: the scrap panel's pull-up tab runs along the bottom, and the toolbar and strips ride above it */
+.collage { --scrap-tab: 34px; }
+.scrap-tab {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 14;
+  height: calc(var(--scrap-tab) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  display: flex; flex-direction: column; align-items: center;
+  background: var(--panel);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.06);
+  touch-action: none;
+  animation: fade-up var(--t-med) var(--ease-out) both;
+}
+.scrap-tab .grabber { height: 15px; }
+.scrap-tab .st-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 1; color: var(--mute); transition: color var(--t-fast); }
+.scrap-tab:active .st-label { color: var(--ink-2); }
+.collage .bottom-stack { padding-bottom: calc(var(--safe-bottom) + 12px + var(--scrap-tab)); }
+.create[data-dock="bottom"] .collage .bottom-stack { padding-bottom: calc(var(--safe-bottom) + 12px + 59.2 * var(--u) + var(--scrap-tab)); }
+.collage .tray-dock[data-dock="bottom"], .collage .dock-slot[data-dock="bottom"] { top: calc(100% - var(--safe-bottom) - 12px - var(--scrap-tab) - 26.5 * var(--u)); }
 .create[data-dock="top"] .rail { top: calc(var(--safe-top) + 72px + 53 * var(--u)); }
-.create[data-dock="top"] .orient-chip { top: calc(var(--safe-top) + 64px + 53 * var(--u)); }
 .create[data-dock="right"] .rail.right { right: auto; left: 14px; }
 .tray-cell:focus-visible > rect { stroke: rgba(0, 0, 0, 0.2); stroke-width: 1; }
 .tray-art { transition: transform var(--t-med) var(--ease-spring); }
@@ -219,18 +238,6 @@ textarea.text-input { height: auto; min-height: 88px; padding: 12px 14px; resize
 .sel-bar button:active { background: #F5F5F5; }
 .sel-bar .danger { color: var(--accent); }
 
-.orient-chip {
-  position: absolute;
-  left: 14px; top: calc(var(--safe-top) + 62px);
-  z-index: 20;
-  height: 30px; padding: 0 10px 0 6px;
-  display: inline-flex; align-items: center; gap: 6px;
-  border-radius: 13px; background: var(--panel); box-shadow: var(--shadow-1);
-  font-size: 12px; font-weight: 500;
-}
-.oc-side { height: 20px; padding: 0 7px; border-radius: 13px; display: inline-flex; align-items: center; font-size: 11px; background: var(--ink); color: #fff; }
-.oc-side.back { background: var(--fold); }
-
 .rail-round {
   width: 44px; height: 44px; border-radius: 50%;
   background: var(--panel); box-shadow: var(--shadow-1);
@@ -240,15 +247,6 @@ textarea.text-input { height: auto; min-height: 88px; padding: 12px 14px; resize
 .rail-round:active { transform: scale(0.9); }
 .rail-round.music img { width: 100%; height: 100%; object-fit: cover; }
 .rail-round.bg { box-shadow: 0 0 0 3px #fff, 0 0 0 4px #E3E3E3, var(--shadow-1); }
-
-.page-strip { gap: 14px; align-items: flex-end; padding: 2px 4px; height: 64px; }
-.ps-group { display: flex; gap: 8px; align-items: flex-end; flex: none; }
-.ps-label { font-size: 9px; color: var(--mute); writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; letter-spacing: 0.06em; text-transform: uppercase; }
-.ps { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; opacity: 0.5; transition: opacity var(--t-fast), transform var(--t-fast) var(--ease-spring); }
-.ps img { max-height: 48px; max-width: 56px; display: block; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
-.ps.on { opacity: 1; transform: translateY(-3px) scale(1.06); }
-.ps-n { font-size: 9px; color: var(--mute); margin-top: 2px; }
-.ps-ph { width: 32px; height: 44px; background: #E9E9E9; display: block; }
 
 .ink-colors { gap: 10px; padding: 6px 10px; background: var(--panel); border-radius: 13px; box-shadow: var(--shadow-1); animation: fade-up var(--t-fast) var(--ease-out) both; }
 .ink-colors .sw { flex: none; width: 30px; height: 30px; }
@@ -269,4 +267,4 @@ textarea.text-input { height: auto; min-height: 88px; padding: 12px 14px; resize
 .sv-scroll { position: absolute; inset: calc(var(--safe-top) + 64px) 0 0; padding: 8px 24px calc(var(--safe-bottom) + 24px); display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .sv-side { display: flex; flex-direction: column; gap: 6px; width: 100%; align-items: center; animation: fade-up var(--t-med) var(--ease-out) both; }
 .sv-label { font-size: 11px; color: var(--mute); align-self: flex-start; letter-spacing: 0.04em; text-transform: uppercase; }
-.create:has(.spread-view) .stepper, .create:has(.spread-view) .orient-chip { opacity: 0; pointer-events: none; }
+.create:has(.spread-view) .stepper { opacity: 0; pointer-events: none; }

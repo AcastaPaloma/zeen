@@ -40,9 +40,12 @@ export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, rea
   const press = useRef<number>(0)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    // keep the active pose centred
-    const el = ref.current?.querySelector(`[data-i="${active}"]`) as HTMLElement | null
-    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    // keep the active pose centred (scrolling only the strip: scrollIntoView would drag the screen along too)
+    const strip = ref.current
+    const el = strip?.querySelector<HTMLElement>(`[data-i="${active}"]`)
+    if (!strip || !el) return
+    const s = strip.getBoundingClientRect(), b = el.getBoundingClientRect()
+    strip.scrollTo({ left: strip.scrollLeft + (b.left + b.width / 2) - (s.left + s.width / 2), behavior: 'smooth' })
   }, [active])
   const kfs = doc.keyframes
   const mutate = (fn: (k: ZineDoc['keyframes']) => ZineDoc['keyframes'], label: string) => ed.commit({ ...doc, keyframes: fn(kfs.slice()) }, label)

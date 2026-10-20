@@ -5,7 +5,8 @@ import {
   WebGLRenderer,
 } from 'three'
 import { onImageLoad } from '../lib/assets'
-import { composeSide, objectHasMotion } from '../lib/compose'
+import { composeSide, isGifScrap, objectHasMotion } from '../lib/compose'
+import { gifFrameIndex } from '../lib/gif'
 import { FX_GLSL, fxFor } from '../lib/effects'
 import { haptic, sfx } from '../lib/feedback'
 import { bbox, clamp, difference, union as unionPolys } from '../lib/geom'
@@ -89,6 +90,8 @@ export class ZineScene {
    * fingers pinch and pan; nothing a drag does turns it over (the reader leaves that to double-tap)
    */
   dragPan = false
+  /** with dragPan: at or below this zoom the whole zine is in view, so a drag only stretches and springs back */
+  panFreeZoom = 1.04
   /** a fold let go mid-way springs fully closed or fully open, whichever is nearer (the reader); else it holds */
   snapFolds = false
   private panVel = new Vector2()
@@ -118,6 +121,8 @@ export class ZineScene {
   private last = 0
   private dirtyTex = new Set<string>()
   private lastCompose = 0
+  /** per surface, the frames its GIFs were last drawn at */
+  private gifShown = new Map<string, string>()
   private ray = new Raycaster()
   private listeners = new Map<Evt, Set<(a?: unknown) => void>>()
   private ro: ResizeObserver
@@ -220,6 +225,21 @@ export class ZineScene {
   }
 
   invalidate(surface: string) { this.dirtyTex.add(surface) }
+  private tickGifs() {
+    const ms = this.time * 1000
+    let due: Map<string, string> | null = null
+    for (const o of this.doc.objects) {
+      if (o.kind !== 'scrap' || o.hidden || !isGifScrap(o)) continue
+      due ??= new Map()
+      due.set(o.surface, (due.get(o.surface) ?? '') + gifFrameIndex(o.src, ms) + ',')
+    }
+    if (!due) return
+    for (const [surface, frames] of due) {
+      if (this.gifShown.get(surface) === frames) continue
+      this.gifShown.set(surface, frames)
+      this.invalidate(surface)
+    }
+  }
   invalidateAll() { if (this.doc) for (const s of this.doc.surfaces) this.dirtyTex.add(s.id) }
   setHidden(ids: string[]) { this.hidden = new Set(ids); this.invalidateAll() }
 
@@ -616,16 +636,22 @@ export class ZineScene {
       if (pm) this.tintMesh.matrix.copy(pm).multiply(this.tintMesh.userData.local)
     }
     this.updateView(dt)
-    // content animation (line boil on twos ≈ 12 fps)
-    const animated = this.animateContent && (this.doc.finalize.boilAll || this.doc.finalize.wiggle || this.doc.objects.some(objectHasMotion))
-    if (animated && now - this.lastCompose > 1000 / 12) { this.invalidateAll() }
+    // content animation: line boil and wiggle on twos (≈ 12 fps); GIFs at their own pace, redrawing a page
+    // whenever one of its GIFs moves on to its next frame
+    const boils = this.doc.finalize.boilAll || this.doc.finalize.wiggle || this.doc.objects.some(o => o.kind === 'ink' && objectHasMotion(o))
+    if (this.animateContent && boils && now - this.lastCompose > 1000 / 12) { this.invalidateAll() }
+    if (this.animateContent) this.tickGifs()
     if (this.dirtyTex.size) {
       this.lastCompose = now
       for (const id of this.dirtyTex) this.composeNow(id)
       this.dirtyTex.clear()
       this.updateFx()
     }
-    if (!this.pointers.size && this.panVel.lengthSq() > 1e-4) {
+    if (this.dragPan && !this.pointers.size && this.zoom <= this.panFreeZoom) {
+      // the whole zine is in view: always settle back to centre it
+      this.panVel.set(0, 0)
+      if (this.pan.lengthSq() > 1e-6) this.pan.multiplyScalar(Math.exp(-dt * 10)); else this.pan.set(0, 0)
+    } else if (!this.pointers.size && this.panVel.lengthSq() > 1e-4) {
       this.panBy(this.panVel.x * dt, this.panVel.y * dt)
       this.panVel.multiplyScalar(Math.exp(-dt * 6))
     }
@@ -1218,7 +1244,8 @@ export class ZineScene {
     if (this.gesture === 'pan') {
       const now = performance.now(), dt = Math.max(1, now - this.panAt) / 1000
       this.panAt = now
-      const k = this.dist * Math.tan((FOV * Math.PI) / 360) * 2 / this.h
+      // zoomed out to the whole zine, the drag only gives a little (it springs back in the loop)
+      const k = this.dist * Math.tan((FOV * Math.PI) / 360) * 2 / this.h * (this.zoom <= this.panFreeZoom ? 0.3 : 1)
       this.panBy(pdx * k, -pdy * k)
       this.panVel.set(this.panVel.x * 0.6 + (pdx * k / dt) * 0.4, this.panVel.y * 0.6 + (-pdy * k / dt) * 0.4)
       return

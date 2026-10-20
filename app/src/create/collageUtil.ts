@@ -1,4 +1,4 @@
-import { drawStroke, drawText, layoutText, processedScrap, pxPerCm } from '../lib/compose'
+import { drawStroke, drawText, isGifScrap, layoutText, processedScrap, pxPerCm } from '../lib/compose'
 import { bbox } from '../lib/geom'
 import { flatToPage, pageToFlat } from '../lib/paper'
 import type { Effect, InkObj, Side, Vec2, ZineDoc, ZObject } from '../lib/types'
@@ -160,7 +160,7 @@ function inRing(p: Vec2, r: Vec2[]) {
  */
 export function objectImage(o: ZObject, effects: Effect[] = []): string | null {
   if (o.kind === 'scrap') {
-    if (o.gif) return o.src
+    if (isGifScrap(o)) return o.src // keeps playing wherever it's saved to
     const p = processedScrap(o, effects)
     if (!p) return o.src
     if (!o.flipX) return p.canvas.toDataURL('image/webp', 0.92)

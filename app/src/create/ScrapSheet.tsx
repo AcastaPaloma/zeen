@@ -127,7 +127,53 @@ function Detail({ item, selected, onBack, onToggle, onAdd }: {
   )
 }
 
-export function ScrapSheet({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (items: ScrapItem[]) => void }) {
+/**
+ * The scrap panel's pull-up tab, along the bottom of the collage screen. Drag it up and the panel follows the
+ * finger (let go past a little way, or flick, and it opens; short of that it slides back); a tap opens it.
+ */
+export function ScrapTab({ onPull, onOpen }: { onPull: (px: number | null) => void; onOpen: () => void }) {
+  const g = useRef<{ id: number; y0: number; h: number; moved: boolean; trail: { t: number; y: number }[] } | null>(null)
+  const end = (e: React.PointerEvent, cancel = false) => {
+    const d = g.current
+    if (!d || d.id !== e.pointerId) return
+    g.current = null
+    const up = d.y0 - e.clientY
+    // upward speed over the last moment of the drag (px/ms), so a flick opens it even when short
+    const now = performance.now()
+    const from = d.trail.find(p => now - p.t < 90) ?? d.trail[d.trail.length - 1]
+    const v = from && now - from.t > 8 ? (from.y - e.clientY) / (now - from.t) : 0
+    if (!cancel && (!d.moved || up > 70 || v > 0.5)) { haptic('tap'); onOpen() }
+    else onPull(null)
+  }
+  return (
+    <button className="scrap-tab" aria-label="Scraps: pull up or tap to add scraps"
+      onPointerDown={e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return
+        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+        g.current = { id: e.pointerId, y0: e.clientY, h: e.currentTarget.offsetHeight, moved: false, trail: [{ t: performance.now(), y: e.clientY }] }
+      }}
+      onPointerMove={e => {
+        const d = g.current
+        if (!d || d.id !== e.pointerId) return
+        const now = performance.now()
+        d.trail.push({ t: now, y: e.clientY })
+        while (d.trail.length > 2 && now - d.trail[0].t > 200) d.trail.shift()
+        const up = d.y0 - e.clientY
+        if (!d.moved && Math.abs(up) < 6) return
+        d.moved = true
+        // the panel's top starts level with the tab's, then rides the finger
+        onPull(d.h + Math.max(0, up))
+      }}
+      onPointerUp={e => end(e)} onPointerCancel={e => end(e, true)}
+      // the pointer handlers already opened it (or not); keyboard activation lands here
+      onClick={e => { if (e.detail === 0) onOpen() }}>
+      <span className="grabber" aria-hidden><span /></span>
+      <span className="st-label"><Icon name="image" size={14} />Scraps</span>
+    </button>
+  )
+}
+
+export function ScrapSheet({ open, onClose, onAdd, pull = null }: { open: boolean; onClose: () => void; onAdd: (items: ScrapItem[]) => void; pull?: number | null }) {
   const scrapbook = useApp(s => s.scrapbook)
   const addScraps = useApp(s => s.addScraps)
   const showToast = useApp(s => s.showToast)
@@ -189,7 +235,7 @@ export function ScrapSheet({ open, onClose, onAdd }: { open: boolean; onClose: (
   }
 
   return (
-    <Sheet open={open} onClose={onClose} height="tall" className="scrap-sheet">
+    <Sheet open={open} onClose={onClose} height="tall" className="scrap-sheet" pull={pull}>
       <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={e => { importFiles(e.target.files, 'files'); e.target.value = '' }} />
       <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={e => { importFiles(e.target.files, 'camera'); e.target.value = '' }} />
       <label className="search-field">

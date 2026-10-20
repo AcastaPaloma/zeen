@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadImage, trackById } from '../lib/assets'
 import { haptic, sfx } from '../lib/feedback'
 import { uid } from '../lib/geom'
@@ -7,17 +7,18 @@ import { flatToPage } from '../lib/paper'
 import { useApp } from '../lib/store'
 import type { InkObj, InkTool, ScrapItem, ScrapObj, Side, Stroke, TextObj, Vec2, ZineDoc, ZObject } from '../lib/types'
 import { FEELS } from '../three/spring'
-import type { PageRef, PointerInfo, TwoInfo, ZineScene } from '../three/ZineScene'
+import type { PointerInfo, TwoInfo, ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
 import { CheckBtn, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Slider, Toggle, VSlider } from '../ui/kit'
 import { boxCorners, isClipped, objectAt, objectBox, pageRect, pagesOf, pageThumb, transformObject } from './collageUtil'
 import type { StepProps } from './Create'
 import { HistorySheet } from './CutFold'
+import { KeyframeStrip } from './KeyframeStrip'
 import { useEditor } from './editor'
 import { EffectsSheet } from './EffectsSheet'
 import { LayersSheet } from './LayersSheet'
 import { MusicPicker } from './MusicPicker'
-import { ScrapSheet } from './ScrapSheet'
+import { ScrapSheet, ScrapTab } from './ScrapSheet'
 import { SpreadView } from './SpreadView'
 import { TextEditor } from './TextEditor'
 import { CollageTray } from './Trays'
@@ -50,13 +51,13 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
   const showToast = useApp(s => s.showToast)
   const [drawing, setDrawing] = useState(false)
   const [sheet, setSheet] = useState<SheetName>('none')
+  // how far the scrap tab has pulled its panel into view, mid-drag
+  const [scrapPull, setScrapPull] = useState<number | null>(null)
   const [face, setFace] = useState<{ panel: string; side: Side } | null>(null)
-  const [pages, setPages] = useState<PageRef[]>([])
   const [spread, setSpread] = useState(false)
   const [text, setText] = useState<{ open: boolean; initial: TextObj | null }>({ open: false, initial: null })
   const [zoom, setZoom] = useState(0.39)
   const [kfT, setKfT] = useState(0)
-  const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [guides, setGuides] = useState<{ x?: [number, number][]; y?: [number, number][] }>({})
   const [colorOpen, setColorOpen] = useState(false)
   const [mutedMusic, setMutedMusic] = useState(false)
@@ -76,8 +77,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
   useEffect(() => {
     if (!scene) return
     scene.oneFingerSwipe = false
-    const offPages = scene.on('pages', (p: PageRef[]) => setPages(p))
-    setPages(scene.pages)
     // start on the first page, flat and face-on
     const first = scene.pages[0]
     if (first) { scene.facePanel(first.panel, first.side, { focus: true }); setFace({ panel: first.panel, side: first.side }) }
@@ -100,7 +99,7 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
       useEditor.setState({ doc: nd })
       useApp.getState().saveZine(nd)
     })
-    return () => { offPages(); offUp(); offView(); offCommit(); scene.oneFingerSwipe = true }
+    return () => { offUp(); offView(); offCommit(); scene.oneFingerSwipe = true }
   }, [scene])
 
   useEffect(() => { scene?.setZoom(0.5 * Math.pow(6, zoom)) }, [scene, zoom])
@@ -111,20 +110,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
     else music.stop()
     return () => music.stop()
   }, [doc.music, mutedMusic])
-
-  // page strip thumbnails, cut from the live textures
-  useEffect(() => {
-    if (!scene) return
-    const t = setTimeout(() => {
-      const out: Record<string, string> = {}
-      for (const p of pages) {
-        const c = pageThumb(scene, p.panel, p.side, 96)
-        if (c) out[`${p.panel}:${p.side}`] = c.toDataURL('image/webp', 0.7)
-      }
-      setThumbs(out)
-    }, 450)
-    return () => clearTimeout(t)
-  }, [scene, pages, doc.objects, doc.surfaces, doc.bg])
 
   // ---------------------------------------------------------------- selection overlay (imperative, per frame)
 
@@ -157,6 +142,15 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
     const d = docRef.current
     const nd = { ...d, objects: d.objects.map(o => (o.id === id ? ({ ...o, ...p } as ZObject) : o)) }
     if (label) commit(nd, label); else ed.live(nd)
+  }
+
+  /** Fold into keyframe i, then face whichever page it leaves towards us. */
+  const goKeyframe = (i: number) => {
+    const kf = doc.keyframes[i]
+    if (!scene || !kf) return
+    setKfT(i)
+    scene.setAngles(kf.angles, { feel: FEELS[doc.transition.feel], sequential: doc.transition.mode === 'sequential' })
+    setTimeout(() => { const f = scene.nearestFace(); if (f) { scene.facePanel(f.panel, f.side, { focus: true }); setFace(f) } }, 450)
   }
 
   const focusPage = useCallback((panel: string, side: Side) => {
@@ -462,8 +456,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
 
   // ---------------------------------------------------------------- render data
 
-  const groups = useMemo(() => ({ front: pages.filter(p => p.side === 'front'), back: pages.filter(p => p.side === 'back') }), [pages])
-  const faceN = face && scene ? scene.pageOf(face.panel, face.side) : 0
   const track = trackById(doc.music?.track)
   const effectScopes = {
     scrap: selected?.kind === 'scrap' ? selected.id : undefined,
@@ -508,14 +500,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           : <PillGroup className="solo"><IconBtn name="right" label="Next: Finalize" onClick={() => { ed.select(null); next() }} /></PillGroup>}
       </div>
 
-      {face && (
-        <button className="orient-chip" onClick={() => setSpread(true)} aria-label="Show all pages">
-          <span className={`oc-side ${face.side}`}>{face.side === 'front' ? 'Front' : 'Back'}</span>
-          <span>P{faceN || 1}</span>
-          <Icon name="pages" size={14} />
-        </button>
-      )}
-
       <div className="rail right">
         <VSlider value={zoom} onChange={setZoom} label="Zoom" />
         {drawing ? (
@@ -540,29 +524,14 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
       </div>
 
       <div className="bottom-stack">
-        {!drawing && pages.length > 0 && (
-          <div className="page-strip hscroll" role="tablist" aria-label="Pages">
-            {(['front', 'back'] as Side[]).map(side => groups[side].length > 0 && (
-              <div key={side} className="ps-group">
-                <span className="ps-label">{side === 'front' ? 'Front' : 'Back'}</span>
-                {groups[side].map(p => {
-                  const on = face?.panel === p.panel && face?.side === p.side
-                  const src = thumbs[`${p.panel}:${p.side}`]
-                  return (
-                    <button key={`${p.panel}:${p.side}`} role="tab" aria-selected={on} className={`ps ${on ? 'on' : ''}`} onClick={() => focusPage(p.panel, p.side)}>
-                      {src ? <img src={src} alt="" /> : <span className="ps-ph" />}
-                      <span className="ps-n">{p.n}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
+        {/* the folds' keyframes: tap one to fold the zine into that pose and work on what it shows */}
+        {doc.keyframes.length > 1 && !drawing && (
+          <KeyframeStrip doc={doc} active={Math.round(kfT)} onPick={goKeyframe} readOnly dither />
         )}
         {doc.keyframes.length > 1 && !drawing && (
           <Ruler value={kfT} count={doc.keyframes.length}
             onChange={t => { setKfT(t); scene?.setAngles(scene.poseAt(t), { animate: false }) }}
-            onRelease={i => { setKfT(i); scene?.setAngles(doc.keyframes[i].angles, { feel: FEELS[doc.transition.feel] }); setTimeout(() => { const f = scene?.nearestFace(); if (f && scene) { scene.facePanel(f.panel, f.side, { focus: true }); setFace(f) } }, 450) }} />
+            onRelease={goKeyframe} />
         )}
         {colorOpen && drawing && (
           <div className="ink-colors hscroll">
@@ -584,7 +553,8 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           onMove={(objects, label) => commit({ ...docRef.current, objects }, label)} />
       )}
 
-      <ScrapSheet open={sheet === 'scrap'} onClose={() => setSheet('none')} onAdd={addScraps} />
+      <ScrapTab onPull={setScrapPull} onOpen={() => { setSheet('scrap'); setScrapPull(null) }} />
+      <ScrapSheet open={sheet === 'scrap'} onClose={() => setSheet('none')} onAdd={addScraps} pull={scrapPull} />
       <MusicPicker open={sheet === 'music'} onClose={() => setSheet('none')} value={doc.music}
         onChange={m => { commit({ ...docRef.current, music: m }, m ? 'Soundtrack' : 'Remove soundtrack') }} />
       <EffectsSheet open={sheet === 'effects'} effects={doc.effects} scopes={effectScopes}

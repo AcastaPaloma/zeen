@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { haptic, sfx } from '../lib/feedback'
 import { clamp, closestOnSegment, dist, uid } from '../lib/geom'
 import { music } from '../lib/music'
-import { cutPath, flapOf, panelDepth, type CutStyle } from '../lib/paper'
+import { cutPath, derive, flapOf, panelDepth, type CutStyle, type Derived } from '../lib/paper'
 import { useApp } from '../lib/store'
 import type { Crease, Vec2, ZineDoc } from '../lib/types'
 import { FEELS } from '../three/spring'
@@ -14,7 +14,7 @@ import { useEditor } from './editor'
 import { KeyframeStrip } from './KeyframeStrip'
 import { CutTray, FoldTray, PickTray } from './Trays'
 import { Loupe } from './Loupe'
-import { addLeaf, applyCut, applyFold, cutPreview, deleteCrease, foldPreview, updateCrease } from './ops'
+import { addLeaf, applyCut, applyFold, cutPreview, deleteCrease, foldPlan, foldPreview, freeSide, updateCrease } from './ops'
 
 type Tool = 'pick' | 'cut' | 'fold'
 type FoldSub = 'fold' | 'page'
@@ -34,6 +34,21 @@ interface Drag {
   clickAt?: number[]
   clicked?: number
   cancelHover?: boolean
+  /** the press landed on paper (so its panel is the one under the finger, not just the nearest) */
+  onPaper?: boolean
+  /** a fold: where the drawn line lands, and whether it's blocked */
+  target?: FoldTarget
+  bad?: boolean
+}
+
+/** A fold line projected onto the panel it lands on; `error` when that panel can't take it. */
+interface FoldTarget { panel: string; A: Vec2; B: Vec2; error?: 'cross' | 'same' | 'covered' }
+
+const FOLD_BLOCKED = {
+  cross: "Folds can't cross where pages are joined",
+  same: "There's already a fold there",
+  covered: 'That line runs under another layer of paper',
+  tear: 'That fold would tear the paper',
 }
 
 interface LastAction { kind: 'cut' | 'fold'; panel: string; A: Vec2; B: Vec2; finger: Vec2[]; seed: number; pre: ZineDoc; style: CutStyle }
@@ -80,6 +95,12 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const overlay = useRef<HTMLCanvasElement>(null)
   const dragRef = useRef<Drag | null>(null)
+  // the paper before the last action, for re-doing it from its end handles
+  const preDerived = useRef<{ doc: ZineDoc; d: Derived } | null>(null)
+  const derivedOf = (doc: ZineDoc) => {
+    if (preDerived.current?.doc !== doc) preDerived.current = { doc, d: derive(doc, { edges: true }) }
+    return preDerived.current.d
+  }
   const docRef = useRef(doc)
   docRef.current = doc
   const cut = ed.cut
@@ -163,9 +184,16 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
       ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke()
       ctx.setLineDash([])
     }
-    const color = d.kind === 'cut' ? '#FF4934' : FOLD
-    ring(ctx, scene.flatToScreen(d.panel, d.A), color)
-    ring(ctx, scene.flatToScreen(d.panel, d.B), color)
+    const color = d.kind === 'cut' || d.bad ? '#FF4934' : FOLD
+    const a = scene.flatToScreen(d.panel, d.A), b = scene.flatToScreen(d.panel, d.B)
+    if (d.bad) {
+      // a blocked fold has no crease to show, so show the line itself
+      ctx.setLineDash([7, 6]); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.strokeStyle = color
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke()
+      ctx.setLineDash([])
+    }
+    ring(ctx, a, color)
+    ring(ctx, b, color)
   }, [scene, cut])
 
   useEffect(() => {
@@ -263,20 +291,82 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
     return best
   }, [scene])
 
-  const updatePreview = useCallback((d: Drag) => {
+  /**
+   * Where a fold line lands. The line between its two ends, as drawn on screen, is projected onto the paper
+   * under it: the pressed panel if the fold works there, else whichever panel the line passes over most that
+   * can take it. So a line drawn across any of the paper always makes a crease, unless every panel it crosses
+   * is bound along it.
+   */
+  const foldTarget = useCallback((d: Drag): FoldTarget | null => {
+    if (!scene) return null
+    let blocked: FoldTarget | null = null
+    // a crease can only go where its paper is the top layer: anything lying over the line (a page, a folded
+    // flap) would have to fold with it
+    const underLayer = (panel: string, seg: [Vec2, Vec2]) => {
+      const eye = scene.camera.position
+      for (let i = 1; i < 16; i++) {
+        const t = i / 16
+        const w = scene.panelWorld(panel, [seg[0][0] + (seg[1][0] - seg[0][0]) * t, seg[0][1] + (seg[1][1] - seg[0][1]) * t])
+        const [x, y] = scene.toScreen(w)
+        const h = scene.pick(x, y)
+        if (!h || h.panel === panel) continue
+        const far = w.distanceTo(eye)
+        if (h.dist < far * (1 - 1e-4)) return true
+      }
+      return false
+    }
+    const tryOn = (panel: string, A: Vec2 | null, B: Vec2 | null): FoldTarget | null => {
+      if (!A || !B) return null
+      const plan = foldPlan(scene.d, panel, A, B)
+      if (!plan) return null
+      if ('error' in plan) { blocked ??= { panel, A, B, error: plan.error }; return null }
+      if (underLayer(panel, plan.seg)) { blocked ??= { panel, A, B, error: 'covered' }; return null }
+      return { panel, A, B }
+    }
+    if (d.onPaper) { const t = tryOn(d.panel, d.A, d.B); if (t) return t }
+    const s0 = scene.flatToScreen(d.panel, d.A), s1 = scene.flatToScreen(d.panel, d.B)
+    const over = new Map<string, number>()
+    const N = 20
+    for (let i = 0; i <= N; i++) {
+      const h = scene.pick(s0[0] + ((s1[0] - s0[0]) * i) / N, s0[1] + ((s1[1] - s0[1]) * i) / N)
+      if (h) over.set(h.panel, (over.get(h.panel) ?? 0) + 1)
+    }
+    for (const [panel] of [...over].sort((x, y) => y[1] - x[1])) {
+      if (panel === d.panel && d.onPaper) continue
+      const t = panel === d.panel ? tryOn(panel, d.A, d.B) : tryOn(panel, scene.planeHit(panel, s0[0], s0[1]), scene.planeHit(panel, s1[0], s1[1]))
+      if (t) return t
+    }
+    // a line that never crosses the paper still folds the nearest panel if its extension does
+    if (!over.size && !d.onPaper) { const t = tryOn(d.panel, d.A, d.B); if (t) return t }
+    return blocked
+  }, [scene])
+
+  const updatePreview = useCallback((d: Drag, pre?: ZineDoc) => {
     if (!scene) return
     if (d.kind === 'cut') {
       const path = cutPath(cut.style, d.A, d.B, d.finger, cut.roughness, d.seed, cut.ruler)
       const pv = cutPreview(scene, d.panel, path)
       scene.setTint(d.panel, pv?.region ?? null, '#FF4934', 0.3)
     } else if (d.kind === 'fold') {
+      d.target = undefined; d.bad = false
       if (dist(d.A, d.B) < 0.6) { scene.setGhost(null, null, null); scene.setTint(null, null); marks(); return }
-      const pv = foldPreview(scene, d.panel, d.A, d.B)
-      scene.setGhost(pv ? d.panel : null, pv?.region ?? null, pv?.crease ?? null, FOLD, 0.2)
-      scene.setTint(pv ? d.panel : null, pv?.region ?? null, FOLD, 0.12)
-      marks(pv?.crease ?? null)
+      // re-doing the last fold from its end handles stays on its panel, measured against the paper before it
+      const D = pre ? derivedOf(pre) : scene.d
+      const t = pre ? { panel: d.panel, A: d.A, B: d.B } : foldTarget(d)
+      const pv = t && !t.error ? foldPreview(D, scene, t.panel, t.A, t.B) : null
+      d.target = t ?? undefined
+      if (t && pv && 'crease' in pv) {
+        scene.setGhost(t.panel, pv.region, pv.crease, FOLD, 0.2)
+        scene.setTint(t.panel, pv.region, FOLD, 0.12)
+        marks(pv.crease)
+      } else {
+        d.bad = !!(t?.error || (pv && 'error' in pv))
+        scene.setGhost(null, null, null)
+        scene.setTint(d.bad && t ? t.panel : null, d.bad && t ? (D.panels.get(t.panel)?.region ?? null) : null, '#FF4934', 0.14)
+        marks()
+      }
     }
-  }, [scene, cut, marks])
+  }, [scene, cut, marks, foldTarget])
 
   useEffect(() => {
     if (!scene) return
@@ -315,12 +405,13 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         }
         const panel = pickPanel(p.x, p.y)
         if (!panel) return false
+        const onPaper = scene.pick(p.x, p.y)?.panel === panel
         const raw = scene.planeHit(panel, p.x, p.y)
         if (!raw) return false
         const s = snapPoint(panel, raw, [p.x, p.y])
         const d: Drag = {
           kind: tool === 'cut' ? 'cut' : 'fold', panel, A: s.p, B: s.p, sA: scene.flatToScreen(panel, s.p), sB: [p.x, p.y],
-          finger: [s.p], seed: Math.floor(Math.random() * 1e9), snapKey: s.key,
+          finger: [s.p], seed: Math.floor(Math.random() * 1e9), snapKey: s.key, onPaper,
         }
         if (s.key) haptic('tick')
         dragRef.current = d; setDrag(d); setSel(null); setLast(null); setLastEnds(null)
@@ -369,7 +460,8 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
           const which = (d as Drag & { which: number }).which
           const A = which === 0 ? d.B : last.A, B = which === 0 ? last.B : d.B
           const fake: Drag = { ...d, kind: last.kind, A, B, finger: last.kind === 'cut' && cut.style !== 'straight' ? [A, B] : [A, B] }
-          updatePreview(fake)
+          updatePreview(fake, last.kind === 'fold' ? last.pre : undefined)
+          d.bad = fake.bad
         } else updatePreview(d)
         setDrag({ ...d })
       },
@@ -400,6 +492,13 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         // drag back to the start cancels
         const sA = scene.flatToScreen(d.panel, d.A)
         if (Math.hypot(p.x - sA[0], p.y - sA[1]) < 14) return
+        if (d.kind === 'fold') {
+          const t = d.target ?? foldTarget(d)
+          if (!t) { showToast('Draw the fold across the paper'); return }
+          if (t.error) { showToast(FOLD_BLOCKED[t.error]); haptic('firm'); return }
+          perform('fold', t.panel, t.A, t.B, d.finger, d.seed, docNow)
+          return
+        }
         perform(d.kind as 'cut' | 'fold', d.panel, d.A, d.B, d.finger, d.seed, docNow)
       },
       toolCancel: () => {
@@ -418,7 +517,7 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
     }
     return () => { scene.handlers = {} }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, tool, sub, cut, last, snapPoint, pickPanel, nearCrease, updatePreview, marks])
+  }, [scene, tool, sub, cut, last, snapPoint, pickPanel, nearCrease, updatePreview, marks, foldTarget])
 
   // ---------------------------------------------------------------- actions
 
@@ -445,7 +544,8 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
         }, 4000)
       }
     } else {
-      const res = applyFold(scene, pre, panel, A, B)
+      const res = applyFold(derivedOf(pre), pre, scene, panel, A, B)
+      if (res && 'error' in res) { showToast(FOLD_BLOCKED[res.error]); haptic('firm'); return }
       if (!res) { if (!replace) showToast('Draw the fold across the paper'); return }
       if (replace) { useEditor.setState({ doc: res.doc }); useApp.getState().saveZine(res.doc) }
       else ed.commit(res.doc, 'Fold')
@@ -476,6 +576,12 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
   const creaseAct = (what: 'side' | 'dir' | 'delete') => {
     if (!selCrease) return
     if (what === 'delete') { ed.commit(deleteCrease(doc, selCrease.id), 'Delete fold'); setSel(null); haptic('tap'); return }
+    if (what === 'side') {
+      // the side that's joined to the rest of the zine can't be the one that swings
+      const free = scene ? freeSide(scene.d, selCrease) : null
+      if (free !== null && free !== -selCrease.flapSide) { showToast("That side is joined to the rest of the zine"); haptic('firm'); return }
+      if (doc.creases.some(k => k.panel === flapOf(selCrease))) { showToast('This flap has folds of its own'); haptic('firm'); return }
+    }
     const p = what === 'side' ? { flapSide: (-selCrease.flapSide) as 1 | -1 } : { dir: (-selCrease.dir) as 1 | -1 }
     ed.commit(updateCrease(doc, selCrease.id, p), what === 'side' ? 'Flip side' : 'Flip direction')
     haptic('tap'); sfx('crease')

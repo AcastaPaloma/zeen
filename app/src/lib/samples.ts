@@ -329,7 +329,7 @@ export function sampleScrapbook(): ScrapItem[] {
   const from = ['"Zine 2" by Ada', '"Floor Crew" by naheel', '"How To Win" by raf.d', 'pinterest', 'camera roll']
   const items: ScrapItem[] = []
   SCRAPS.forEach((s, i) => items.push({
-    id: s.id, src: s.src, name: s.name, note: s.note, kind: 'image',
+    id: s.id, src: s.src, name: s.name, note: s.note, kind: s.gif ? 'gif' : 'image', gif: s.gif,
     collection: i < 3 || s.id.includes('hamster') || s.id.includes('chick') ? 'Small guys' : s.id.includes('orca') || s.id.includes('polaroid') ? 'Ocean stuff' : 'Collection 1',
     addedAt: Date.now() - (i + 1) * 864e5 * 0.8, addedBy: i % 3 ? ME : 'u_ada', from: from[i % from.length], where: 'Zeen',
     edition: [10 + i * 3, 700 + i * 13], usedIn: i % 2 ? ['z_june'] : ['z_june', 'z_svsd'],

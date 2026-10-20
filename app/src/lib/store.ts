@@ -1,5 +1,6 @@
 import { del, entries, get, set } from 'idb-keyval'
 import { create } from 'zustand'
+import { RENAMED_SCRAPS } from './assets'
 import { uid } from './geom'
 import { COMMUNITIES, ME, SAMPLE_COMMENTS, SAMPLE_POSTS, sampleScrapbook, sampleZines, USERS } from './samples'
 import type { Comment, Community, Post, ScrapItem, User, ZineDoc } from './types'
@@ -89,6 +90,12 @@ interface AppState extends Persisted {
   markDownloaded(id: string): void
 }
 
+/** Point scraps placed before an asset became a GIF at the GIF, so they play too. */
+function withRenamedScraps(z: ZineDoc): ZineDoc {
+  if (!z.objects.some(o => o.kind === 'scrap' && RENAMED_SCRAPS[o.src])) return z
+  return { ...z, objects: z.objects.map(o => (o.kind === 'scrap' && RENAMED_SCRAPS[o.src] ? { ...o, src: RENAMED_SCRAPS[o.src], gif: true } : o)) }
+}
+
 const LS_KEY = 'zeen.state.v1'
 const IDB_ZINES = 'zeen.zine.'
 const IDB_SCRAPS = 'zeen.scraps.v1'
@@ -162,7 +169,7 @@ export const useApp = create<AppState>((setS, getS) => ({
     const zines: Record<string, ZineDoc> = {}
     for (const z of samples) zines[z.id] = z
     try {
-      for (const [k, v] of await entries()) if (String(k).startsWith(IDB_ZINES)) zines[(v as ZineDoc).id] = v as ZineDoc
+      for (const [k, v] of await entries()) if (String(k).startsWith(IDB_ZINES)) { const z = withRenamedScraps(v as ZineDoc); zines[z.id] = z }
     } catch { /* idb blocked */ }
     let scraps = sampleScrapbook()
     try {
