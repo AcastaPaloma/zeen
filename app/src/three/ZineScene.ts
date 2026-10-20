@@ -463,6 +463,35 @@ export class ZineScene {
     const hit = b ? this.pick((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2) : null
     return hit ? { panel: hit.panel, side: hit.side } : this.nearestFace()
   }
+  /**
+   * The page most in view, and a spot in the middle of what's showing of it. The visible part of the zine is
+   * sampled on a grid; every sample is the first face the camera's ray meets there (so a page hidden under
+   * another never counts), the face with the most samples wins, and the sample nearest the middle of its
+   * samples is returned, so whatever is put there is seen, and kept off spines and edges. `seen` holds every
+   * sample on that face (flat coords): how much of it is showing.
+   */
+  topHit(): (Hit & { seen: Vec2[] }) | null {
+    const b = this.screenBounds()
+    if (!b) return null
+    const c = this.renderer.domElement
+    const x0 = Math.max(b.x0, 0), x1 = Math.min(b.x1, c.clientWidth), y0 = Math.max(b.y0, 0), y1 = Math.min(b.y1, c.clientHeight)
+    if (x1 <= x0 || y1 <= y0) return null
+    const N = 12
+    const faces = new Map<string, Hit[]>()
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const hit = this.pick(x0 + ((i + 0.5) / N) * (x1 - x0), y0 + ((j + 0.5) / N) * (y1 - y0))
+      if (!hit) continue
+      const k = hit.panel + '|' + hit.side
+      const l = faces.get(k)
+      if (l) l.push(hit); else faces.set(k, [hit])
+    }
+    let best: Hit[] | null = null
+    for (const l of faces.values()) if (!best || l.length > best.length) best = l
+    if (!best) return null
+    const mx = best.reduce((t, h) => t + h.flat[0], 0) / best.length, my = best.reduce((t, h) => t + h.flat[1], 0) / best.length
+    const mid = best.reduce((a, h) => (Math.hypot(h.flat[0] - mx, h.flat[1] - my) < Math.hypot(a.flat[0] - mx, a.flat[1] - my) ? h : a))
+    return { ...mid, seen: best.map(h => h.flat) }
+  }
   /** Screen-space bounding box of the whole zine. */
   screenBounds() {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
@@ -918,16 +947,19 @@ export class ZineScene {
 
   // ---------------------------------------------------------------- pages
 
-  /** Number pages in the order the unfold sequence reveals them. */
+  /**
+   * Number pages in the order the unfold sequence reveals them, reading it from the front all the way through
+   * first, then turning it over: so a booklet runs cover, spreads, back cover, like a real one.
+   */
   computePages() {
     const out: PageRef[] = []
     const seen = new Set<string>()
     const kfs = this.doc.keyframes.length ? this.doc.keyframes : [{ id: 'x', name: '', angles: {} }]
     const tmp = new Map<string, Matrix4>()
     const v = new Vector3()
-    for (const kf of kfs) {
-      panelMatrices(this.d, c => kf.angles[c.id] ?? c.angle, tmp)
-      for (const view of ['front', 'back'] as Side[]) {
+    for (const view of ['front', 'back'] as Side[]) {
+      for (const kf of kfs) {
+        panelMatrices(this.d, c => kf.angles[c.id] ?? c.angle, tmp)
         const found: { id: string; side: Side; x: number; y: number }[] = []
         for (const P of this.d.list) {
           if (!P.region.length) continue

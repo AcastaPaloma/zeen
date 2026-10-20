@@ -9,6 +9,8 @@
   display: block;
 }
 .zcard:active { transform: rotate(var(--tilt)) scale(0.95); }
+/* on Home the cards sit a little smaller in their columns, with a touch more air around them */
+.home-feed .zcard { width: 95%; }
 /* while its zine is out in the preview, the card's slot stays empty (Preview) */
 .zcard.pv-hole { visibility: hidden; }
 .zcard img {

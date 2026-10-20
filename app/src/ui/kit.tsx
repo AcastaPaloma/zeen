@@ -23,7 +23,7 @@ export function IconBtn({ name, onClick, label, active, disabled, size = 20, cla
 
 export function CheckBtn({ onClick, color = 'var(--accent)', label = 'Done', icon = 'check' }: { onClick: () => void; color?: string; label?: string; icon?: IconName }) {
   return (
-    <button className="check-btn" style={{ background: color }} onClick={onClick} aria-label={label} title={label}>
+    <button className="check-btn" style={{ '--c': color } as CSSProperties} onClick={onClick} aria-label={label} title={label}>
       <Icon name={icon} size={20} stroke={2.4} />
     </button>
   )
@@ -93,26 +93,32 @@ export function Slider({ value, min = 0, max = 100, step = 1, onChange, onCommit
 }
 
 /** Vertical slider from the Figma frames: + / − ends with a ring knob. */
-export function VSlider({ value, onChange, label, variant = 'zoom', onEnd }: {
+/** How far in from each end of a vertical slider's track the knob stops (px; the rail ends there too). */
+const VS_INSET = 14
+
+export function VSlider({ value, onChange, label, variant = 'zoom', onEnd, wedge }: {
   value: number; onChange: (v: number) => void; label: string; variant?: 'zoom' | 'gradient'; onEnd?: () => void
+  /** a size control: the bar widens toward the top */
+  wedge?: boolean
 }) {
   const track = useRef<HTMLDivElement>(null)
+  // the knob travels the rail between VS_INSET from either end, clear of the + and − buttons
   const set = (clientY: number) => {
     const r = track.current!.getBoundingClientRect()
-    onChange(clamp(1 - (clientY - r.top) / r.height, 0, 1))
+    onChange(clamp(1 - (clientY - r.top - VS_INSET) / Math.max(1, r.height - VS_INSET * 2), 0, 1))
   }
   return (
-    <div className={`vslider vslider-${variant}`} role="slider" aria-label={label} aria-valuenow={Math.round(value * 100)} tabIndex={0}
+    <div className={`vslider vslider-${variant} ${wedge ? 'wedge' : ''}`} role="slider" aria-label={label} aria-valuenow={Math.round(value * 100)} tabIndex={0}
       onKeyDown={e => { if (e.key === 'ArrowUp') onChange(clamp(value + 0.05, 0, 1)); if (e.key === 'ArrowDown') onChange(clamp(value - 0.05, 0, 1)) }}>
-      {variant === 'zoom' && <button className="vs-end" aria-label="More" onClick={() => onChange(clamp(value + 0.1, 0, 1))}><Icon name="plus" size={16} /></button>}
+      {variant === 'zoom' && <button className="vs-end" aria-label="More" onClick={() => onChange(clamp(value + 0.1, 0, 1))}><Icon name="plus" size={24} /></button>}
       <div className="vs-track" ref={track}
         onPointerDown={e => { (e.target as HTMLElement).setPointerCapture(e.pointerId); set(e.clientY) }}
         onPointerMove={e => { if (e.buttons || e.pointerType === 'touch') set(e.clientY) }}
         onPointerUp={() => onEnd?.()}>
         <div className="vs-rail" />
-        <div className="vs-knob" style={{ top: `${(1 - value) * 100}%` }} />
+        <div className="vs-knob" style={{ top: `calc(${VS_INSET}px + ${(1 - value).toFixed(4)} * (100% - ${VS_INSET * 2}px))` }} />
       </div>
-      {variant === 'zoom' && <button className="vs-end" aria-label="Less" onClick={() => onChange(clamp(value - 0.1, 0, 1))}><Icon name="minus" size={16} /></button>}
+      {variant === 'zoom' && <button className="vs-end" aria-label="Less" onClick={() => onChange(clamp(value - 0.1, 0, 1))}><Icon name="minus" size={24} /></button>}
     </div>
   )
 }
@@ -294,7 +300,12 @@ export function Sheet({ open, onClose, children, title, height = 'auto', classNa
     const el = box.current
     const was = wasOpen.current
     wasOpen.current = open
-    if (!el || from === null || open === was) return
+    if (!el || open === was) return
+    if (from === null) {
+      // closing without a field to fold into: drop any pose left from growing out of one, and slide away
+      if (!open) { el.style.transform = ''; el.style.clipPath = '' }
+      return
+    }
     const head = el.querySelector<HTMLElement>('.sheet-head')
     const field = head?.firstElementChild as HTMLElement | null
     if (!head || !field) return

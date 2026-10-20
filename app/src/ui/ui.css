@@ -36,10 +36,12 @@
 .check-btn {
   width: 44px; height: 44px;
   border-radius: var(--r-pill);
+  /* --c is the button's colour (CheckBtn's `color`); the glow takes it too */
+  background: var(--c, var(--accent));
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent);
   transition: transform var(--t-fast) var(--ease-spring), filter var(--t-fast);
 }
 .check-btn:active { transform: scale(0.9); filter: brightness(0.92); }
@@ -148,8 +150,14 @@
 .vslider-gradient { height: 176px; padding: 18px 0; }
 .vs-end { width: 44px; height: 30px; display: grid; place-items: center; color: var(--ink-2); }
 .vs-track { position: relative; flex: 1; width: 44px; cursor: ns-resize; }
-.vs-rail { position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1.5px; background: var(--ink-2); transform: translateX(-50%); }
+.vs-rail { position: absolute; left: 50%; top: 14px; bottom: 14px; width: 1.5px; background: var(--ink-2); transform: translateX(-50%); }
 .vslider-gradient .vs-rail { width: 7px; border-radius: 4px; background: linear-gradient(#F2F2F2, #7B7B7B 60%, #2a2a2a); }
+/* the brush size bar is a wedge: a fine point at the bottom swelling to a round top, like the brush itself */
+.vslider-gradient.wedge .vs-rail {
+  width: 18px; border-radius: 9px 9px 2px 2px;
+  background: linear-gradient(#E4E4E4, #7B7B7B 60%, #2a2a2a);
+  clip-path: polygon(0 0, 100% 0, 58% 100%, 42% 100%);
+}
 .vs-knob {
   position: absolute; left: 50%;
   width: 18px; height: 18px; margin: -9px 0 0 -9px;

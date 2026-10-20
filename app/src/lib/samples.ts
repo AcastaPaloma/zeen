@@ -230,24 +230,6 @@ function june(): ZineDoc {
   return d
 }
 
-function samePace(): ZineDoc {
-  const d = base('u_tove', 'trifold', 'At The Same Pace As You', { description: 'a slow poem in three doors', tags: ['poetry', 'riso'], postTo: 'c_riot' })
-  d.id = 'z_pace'
-  d.coverImage = COVERS['same-pace']
-  d.music = { track: 'velvet-0', start: 0, volume: 0.6 }
-  const r = panelRects(d, 3)
-  d.surfaces[0].color = '#F9F7F4'
-  d.objects = [
-    scrap(COVERS['same-pace'], 'sheet', 'back', r.back[0], { name: 'Cover' }),
-    text('i walk', 'front', r.pw * 0.5, r.ph * 0.5, 1.6, 'serif', '#245AE2'),
-    text('you walk', 'front', r.pw * 1.5, r.ph * 0.5, 1.6, 'serif', '#E8614A'),
-    text('we arrive', 'front', r.pw * 2.5, r.ph * 0.5, 1.6, 'serif', '#4BA334'),
-    sticker('/assets/scraps/polaroid-stars.webp', 'front', r.pw * 2.5, r.ph * 0.22, 4, { sticker: 0, rot: 0.08 }),
-  ]
-  d.effects = [{ id: uid('e'), type: 'riso', amount: 0.45, scope: 'zine' }]
-  return d
-}
-
 function grass(): ZineDoc {
   const d = base('u_leafy', 'half', 'Touch Some Grass', { description: 'a reminder, folded', tags: ['nature', 'mentalhealth'] })
   d.id = 'z_grass'
@@ -304,8 +286,63 @@ function naheel(): ZineDoc {
   return d
 }
 
+function alsoRight(): ZineDoc {
+  const d = base('u_leafy', 'half', "It's Also Right", {
+    description: 'who said forward is the only way? a wander off the path, folded down to pocket size', tags: ['illustration', 'nature', 'riso'],
+  })
+  d.id = 'z_alsoright'
+  d.coverImage = COVERS['also-right']
+  d.music = { track: 'liz-3', start: 0, volume: 0.6 }
+  const r = panelRects(d, 2)
+  // the "desired path" spread is a little wider than two pages: it sits on white paper, letterboxed
+  const h = (r.pw * 2) / 1.404
+  d.surfaces[0].color = '#FBFAF7'
+  d.objects = [
+    scrap(COVERS['also-right'], 'sheet', 'back', r.back[0], { name: 'Cover' }),
+    scrap(COVERS['desired-path'], 'sheet', 'front', { x: 0, y: (r.ph - h) / 2, w: r.pw * 2, h }, { name: 'Desired path' }),
+  ]
+  d.effects = [{ id: uid('e'), type: 'grain', amount: 0.2, scope: 'zine' }]
+  return d
+}
+
+function rewind(): ZineDoc {
+  const d = base('u_tove', 'half', 'Rewind Lucid Fragments (Remix)', {
+    description: 'made at a shuffle bookjam: ten people, one ring, a stack of cyanotype feet', tags: ['riso', 'collage', 'workshop'], postTo: 'c_riot',
+  })
+  d.id = 'z_rewind'
+  d.coverImage = COVERS['rewind-lucid']
+  d.music = { track: 'huggy-1', start: 0, volume: 0.7 }
+  const r = panelRects(d, 2)
+  d.surfaces[0].color = '#D8F1E6'
+  d.objects = [
+    scrap(COVERS['rewind-lucid'], 'sheet', 'back', r.back[0], { name: 'Cover' }),
+    scrap(COVERS['rewind-spread'], 'sheet', 'front', { x: 0, y: 0, w: r.pw * 2, h: r.ph }, { name: 'Spread' }),
+  ]
+  d.effects = [{ id: uid('e'), type: 'grain', amount: 0.25, scope: 'zine' }]
+  return d
+}
+
+function lostDog(): ZineDoc {
+  const d = base('u_mira', 'half', 'Lost Dog Again', { description: 'medically fragile. very bad teeth. last seen 02/29/2024', tags: ['illustration', 'riso', 'humor'] })
+  d.id = 'z_lostdog'
+  d.coverImage = COVERS['lost-dog']
+  d.music = { track: 'ramones-1', start: 0, volume: 0.7 }
+  const r = panelRects(d, 2)
+  // the poster is a touch wider than the page: it sits on paper of its own pink
+  d.surfaces[0].color = '#FF73F2'
+  const c = r.back[0], h = c.w / 0.705
+  d.objects = [
+    scrap(COVERS['lost-dog'], 'sheet', 'back', { x: c.x, y: (r.ph - h) / 2, w: c.w, h }, { name: 'Cover' }),
+    text('have you\nseen this\ndog?', 'front', r.pw * 0.5, r.ph * 0.42, 1.6, 'serif', '#1A1A1A', { rot: -0.03 }),
+    text('answers to: nothing\nlikes: the fever chart\nfears: the vet, again', 'front', r.pw * 1.5, r.ph * 0.5, 0.72, 'typewriter', '#1A1A1A', { align: 'left' }),
+    text('reward: one (1) biscuit', 'back', r.back[1].x + r.pw / 2, r.ph * 0.5, 0.8, 'typewriter', '#1A1A1A', { rot: 0.04 }),
+  ]
+  d.effects = [{ id: uid('e'), type: 'grain', amount: 0.25, scope: 'zine' }]
+  return d
+}
+
 export function sampleZines(): ZineDoc[] {
-  return [svsd(), levels(), howZeen(), montreal(), yellow(), internal(), grass(), june(), foreverYoung(), samePace(), naheel()]
+  return [svsd(), levels(), alsoRight(), howZeen(), montreal(), yellow(), rewind(), internal(), lostDog(), grass(), june(), foreverYoung(), naheel()]
 }
 
 export const SAMPLE_COMMENTS: Omit<Comment, 'id'>[] = [

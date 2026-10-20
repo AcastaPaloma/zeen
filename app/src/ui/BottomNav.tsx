@@ -91,8 +91,9 @@ export function BottomNav({ current, search = true, shown = true }: { current: '
         </button>
       </div>
       <NavTabs current={current} onTab={t => {
-        // any tab folds the search sheet back down first
-        if (useApp.getState().searchOpen) setSearchOpen(false)
+        // any tab puts the search sheet away first: back into the search field if we're staying on Home,
+        // otherwise (that field is folding away too) it just slides down behind the tabs
+        if (useApp.getState().searchOpen) setSearchOpen(false, t === 'home' ? undefined : null)
         if (t === 'create') { haptic('tap'); tab('create'); return }
         haptic('tick')
         // always act, even on the highlighted tab: Home brings you back to Discover from a community or

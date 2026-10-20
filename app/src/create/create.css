@@ -266,5 +266,6 @@ textarea.text-input { height: auto; min-height: 88px; padding: 12px 14px; resize
 .sv-title { text-align: center; font-weight: 500; font-size: 16px; }
 .sv-scroll { position: absolute; inset: calc(var(--safe-top) + 64px) 0 0; padding: 8px 24px calc(var(--safe-bottom) + 24px); display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .sv-side { display: flex; flex-direction: column; gap: 6px; width: 100%; align-items: center; animation: fade-up var(--t-med) var(--ease-out) both; }
-.sv-label { font-size: 11px; color: var(--mute); align-self: flex-start; letter-spacing: 0.04em; text-transform: uppercase; }
+.sv-label { font-size: 12px; color: var(--mute); }
+.sv-pages { margin-left: 8px; color: var(--mute-2); }
 .create:has(.spread-view) .stepper { opacity: 0; pointer-events: none; }

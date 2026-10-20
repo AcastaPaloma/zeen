@@ -88,7 +88,7 @@
   background: rgba(240, 232, 200, 0.85); transform: rotate(6deg); box-shadow: 0 1px 2px rgba(0,0,0,.05);
 }
 .hp-card:active { transform: rotate(var(--rot)) scale(0.96); }
-.hp-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: var(--hpc); text-transform: uppercase; }
+.hp-tag { font-size: 11px; font-weight: 600; color: var(--hpc); }
 .hp-title { font-family: 'DM Serif Display', serif; font-size: 22px; line-height: 1.1; color: var(--ink); }
 .hp-due { font-size: 11px; color: var(--mute); }
 
@@ -124,7 +124,7 @@
 /* it rolls up from under the bottom nav (z 70), and its dim leaves the nav bright */
 .device > .search-sheet { z-index: 62; }
 .search-field button { width: 30px; height: 30px; display: grid; place-items: center; color: var(--mute); }
-.search-idle h5, .search-results h5 { margin: 18px 0 8px; font-size: 12px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; }
+.search-idle h5, .search-results h5 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--mute); }
 .chip-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
 .sr-row {
   display: flex; align-items: center; gap: 12px; width: 100%;

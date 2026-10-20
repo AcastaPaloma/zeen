@@ -73,7 +73,7 @@ export function TextEditor({ open, initial, onDone, onCancel }: {
       <div className="te-stage" style={{ paddingBottom: kb + 150 }} onClick={() => ta.current?.focus()}>
         <div className={`te-wrap align-${align}`}>
           {/* styled preview sits under a transparent textarea that owns the caret */}
-          <div className={`te-preview style-${style} font-${font}`} aria-hidden
+          <div className={`te-preview style-${style} font-${font} ${luminance(color) > 0.75 ? 'pale' : ''}`} aria-hidden
             style={{ fontFamily: css, color: fg, '--box': color, '--stroke': stroke, textAlign: align } as CSSProperties}>
             {!text
               ? <div className="te-line te-ph"><span>What's on your mind?</span></div>
@@ -83,7 +83,7 @@ export function TextEditor({ open, initial, onDone, onCancel }: {
           </div>
           <textarea ref={ta} className={`te-input font-${font}`} value={text} rows={Math.max(1, lines.length)}
             aria-label="Text"
-            style={{ fontFamily: css, textAlign: align, caretColor: style === 'box' ? fg : color, '--ph': luminance(color) > 0.5 ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.55)' } as CSSProperties}
+            style={{ fontFamily: css, textAlign: align, caretColor: style === 'box' ? fg : luminance(color) > 0.75 ? 'var(--ink)' : color } as CSSProperties}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) done() }} />
         </div>

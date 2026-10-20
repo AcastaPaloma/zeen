@@ -53,16 +53,22 @@ export default function Home({ active }: { active: boolean }) {
 
   const newMakers = users.filter(u => u.id !== ME && !following.includes(u.id))
 
-  // depth of field: zines blur as they scroll out under the header and come into focus as they
-  // rise from behind the bottom bar
+  // depth of field: zines (and the New makers row between them) blur as they scroll out under the header
+  // and come into focus as they rise from behind the bottom bar
   const focusCards = useCallback((sc: HTMLElement | null) => {
     if (!sc) return
     const r = sc.getBoundingClientRect()
-    for (const el of sc.querySelectorAll<HTMLElement>('.zcard-wrap')) {
+    // the header and the bottom bar sit over the feed's top and bottom padding
+    const cs = getComputedStyle(sc)
+    const head = r.top + parseFloat(cs.paddingTop || '0'), bar = r.bottom - parseFloat(cs.paddingBottom || '0')
+    const lead = r.top + 150 - head // how far past the header a card's centre starts to blur
+    for (const el of sc.querySelectorAll<HTMLElement>('.zcard-wrap, .new-makers > h4, .nm-row')) {
       const b = el.getBoundingClientRect()
       const c = (b.top + b.bottom) / 2
-      const top = (r.top + 150 - c) / 190 // 0 until the centre passes 150px from the top, 1 at -40px
-      const bottom = (c - (r.bottom - 230)) / 270 // 0 until 230px from the bottom, 1 at +40px
+      // the same rule at both ends: blur sets in as a card's centre comes within `lead` of the header or the
+      // bottom bar, and is full 190px on, by when it's mostly gone behind it
+      const top = (head + lead - c) / 190
+      const bottom = (c - (bar - lead)) / 190
       const k = Math.max(0, Math.min(1, Math.max(top, bottom)))
       el.style.filter = k > 0.02 ? `blur(${(k * 7).toFixed(1)}px)` : ''
       el.style.opacity = k > 0.02 ? (1 - k * 0.4).toFixed(2) : ''

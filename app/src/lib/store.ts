@@ -82,7 +82,8 @@ interface AppState extends Persisted {
   setReadProgress(id: string, kf: number): void
   updateMe(p: Partial<User>): void
   addScraps(items: ScrapItem[]): void
-  setSearchOpen(o: boolean, from?: number): void
+  /** `from`: the client y the sheet grows out of / folds back into; null to just slide (leave it out to keep it) */
+  setSearchOpen(o: boolean, from?: number | null): void
   addRecentSearch(q: string): void
   markSeen(key: string): void
   setSeenIntro(): void
@@ -101,10 +102,10 @@ const IDB_ZINES = 'zeen.zine.'
 const IDB_SCRAPS = 'zeen.scraps.v1'
 
 const defaults = (): Persisted => ({
-  likes: [], saves: ['z_levels', 'z_june', 'z_mtl', 'z_pace'],
+  likes: [], saves: ['z_levels', 'z_june', 'z_mtl', 'z_rewind'],
   shelves: [
     { id: 'sh_all', name: 'Favourites', zines: ['z_levels', 'z_june'] },
-    { id: 'sh_ref', name: 'Design reference', zines: ['z_mtl', 'z_pace'] },
+    { id: 'sh_ref', name: 'Design reference', zines: ['z_mtl', 'z_rewind'] },
   ],
   following: ['u_raf', 'u_naheel', 'u_ada'],
   joined: ['c_svsd', 'c_small'],
@@ -291,7 +292,7 @@ export const useApp = create<AppState>((setS, getS) => ({
       await set(IDB_SCRAPS, mine)
     } catch { /* ignore */ }
   },
-  setSearchOpen(o, from) { setS(s => ({ searchOpen: o, searchFrom: from ?? s.searchFrom })) },
+  setSearchOpen(o, from) { setS(s => ({ searchOpen: o, searchFrom: from === undefined ? s.searchFrom : from })) },
   addRecentSearch(q) {
     if (!q.trim()) return
     setS(s => ({ recentSearches: [q, ...s.recentSearches.filter(x => x !== q)].slice(0, 8) }))

@@ -160,8 +160,22 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
     haptic('tick')
   }, [scene])
 
+  /**
+   * Where a new scrap or text goes: on the page most in view, in the middle of what's showing of it, so it
+   * never lands on a page hidden under another one (ZineScene.topHit).
+   */
   const currentPageCenter = (): { surface: string; side: Side; p: Vec2; w: number } | null => {
     if (!scene) return null
+    const hit = scene.topHit()
+    const s = hit && scene.d.surfaces.get(hit.surface)
+    if (hit && s) {
+      const r = pageRect(scene, hit.panel, hit.side)
+      // sized to what's showing of that page, so a new piece doesn't start out tucked under another layer
+      const xs = hit.seen.map(p => p[0]), ys = hit.seen.map(p => p[1])
+      const seen = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+      const page = r ? Math.min(r.w, r.h) : Math.min(s.frame.w, s.frame.h)
+      return { surface: hit.surface, side: hit.side, p: flatToPage(s.frame, hit.side, hit.flat), w: Math.min(page, Math.max(seen * 1.15, page * 0.4)) }
+    }
     const f = face ?? scene.nearestFace()
     if (!f) return null
     const r = pageRect(scene, f.panel, f.side)
@@ -214,11 +228,13 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           gest.current = { kind: 'draw', panel: hit.panel, side: hit.side, surface: hit.surface, stroke, inkId: id }
           return true
         }
-        if (!hit) { ed.select(null); return false }
+        // a finger landing off the selected piece doesn't drop it yet: it may be the first of two that pinch
+        // it (twoStart). A tap on empty space lets go of it (tap below).
+        if (!hit) return false
         const s = scene.d.surfaces.get(hit.surface)!
         const pp = flatToPage(s.frame, hit.side, hit.flat)
         const o = objectAt(docRef.current, hit.surface, hit.side, pp)
-        if (!o) { if (useEditor.getState().selected) haptic('tick'); ed.select(null); return false }
+        if (!o) return false
         const wasSelected = useEditor.getState().selected === o.id
         if (!wasSelected) { ed.select(o.id); haptic('tick') }
         gest.current = { kind: 'move', panel: hit.panel, side: hit.side, surface: hit.surface, obj: o.id, base: o, start: pp, wasSelected }
@@ -287,19 +303,17 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           ed.live({ ...d, objects: d.objects.map(o => (o.id === g.obj ? g.base! : o)) })
         }
       },
+      // Like Procreate's transform: while a piece is selected, two fingers anywhere pinch it bigger or smaller,
+      // twist it and slide it along with them. With nothing selected, two fingers move the camera as usual.
       twoStart: (t: TwoInfo) => {
         const id = useEditor.getState().selected
         const o = docRef.current.objects.find(x => x.id === id)
         if (!o || o.locked) return false
-        // only when the fingers are on (or around) the selected object
         const b = objectBox(o)
         const panel = scene.panelAt(o.surface, o.side, [b.cx, b.cy])
         if (!panel) return false
-        const pts = boxCorners(b).map(p => scene.pageToScreen(panel, o.side, p))
-        const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
-        const pad = 50
-        if (t.cx < Math.min(...xs) - pad || t.cx > Math.max(...xs) + pad || t.cy < Math.min(...ys) - pad || t.cy > Math.max(...ys) + pad) return false
         gest.current = { kind: 'two', panel, side: o.side, surface: o.surface, obj: o.id, base: o, two: { scale: 1, rot: 0, cx: t.cx, cy: t.cy } }
+        haptic('tick')
         return true
       },
       twoMove: (t: TwoInfo) => {
@@ -315,6 +329,11 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
         ed.live({ ...d, objects: d.objects.map(o => (o.id === g.obj ? moved : o)) })
       },
       twoEnd: () => { gest.current = null; commit(docRef.current, 'Transform') },
+      tap: () => {
+        // a tap off any piece lets go of the selected one
+        if (!useEditor.getState().selected) return
+        haptic('tick'); ed.select(null)
+      },
       doubleTap: (p: PointerInfo) => {
         const hit = scene.pick(p.x, p.y)
         if (!hit) return false
@@ -504,7 +523,7 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
         <VSlider value={zoom} onChange={setZoom} label="Zoom" />
         {drawing ? (
           <>
-            <VSlider variant="gradient" value={Math.min(1, ink.size[ink.tool] / (ink.tool === 'eraser' ? 2 : ink.tool === 'marker' ? 1 : 0.5))} label="Brush size"
+            <VSlider variant="gradient" wedge value={Math.min(1, ink.size[ink.tool] / (ink.tool === 'eraser' ? 2 : ink.tool === 'marker' ? 1 : 0.5))} label="Brush size"
               onChange={v => ed.setInk({ size: { ...ink.size, [ink.tool]: Math.max(0.03, v * (ink.tool === 'eraser' ? 2 : ink.tool === 'marker' ? 1 : 0.5)) } })} />
             <PillGroup className="solo rail-btn"><IconBtn name="more" label="Brush settings" onClick={() => setSheet('ink')} /></PillGroup>
           </>

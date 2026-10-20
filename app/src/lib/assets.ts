@@ -29,7 +29,8 @@ export const SCRAPS = ([
 export const RENAMED_SCRAPS: Record<string, string> = { [`${A}/scraps/hiss-cat.webp`]: `${A}/scraps/hiss-cat.gif` }
 
 export const COVERS: Record<string, string> = Object.fromEntries(
-  ['levels', 'how-zeen', 'montreal', 'yellow-silhouettes', 'forever-young', 'june', 'same-pace', 'svsd', 'svsd-spread']
+  ['levels', 'how-zeen', 'montreal', 'yellow-silhouettes', 'forever-young', 'june', 'svsd', 'svsd-spread',
+    'also-right', 'desired-path', 'rewind-lucid', 'rewind-spread', 'lost-dog']
     .map(n => [n, `${A}/covers/${n}.webp`]),
 )
 

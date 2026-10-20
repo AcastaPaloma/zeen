@@ -269,7 +269,7 @@ export default function Publish({ scene, doc, exit }: StepProps) {
 
       {stamping && (
         <div className="stamp-wrap" aria-live="assertive">
-          <div className="stamp"><span>POSTED</span><small>{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</small></div>
+          <div className="stamp"><span>Posted</span><small>{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</small></div>
         </div>
       )}
     </div>
