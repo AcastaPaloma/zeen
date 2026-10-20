@@ -15,7 +15,9 @@ const seedOf = (id: string) => { let h = 7; for (let i = 0; i < id.length; i++) 
 export const ZineCard = memo(function ZineCard({ z, tag = 'none', onOpen, badge, style }: {
   z: ZineDoc; tag?: CardTag; onOpen?: (z: ZineDoc, rect: DOMRect) => void; badge?: 'reply' | 'pin' | 'draft'; style?: CSSProperties
 }) {
-  const src = useThumb(z)
+  const thumb = useThumb(z)
+  const landing = useApp(s => s.publishLanding?.id === z.id ? s.publishLanding : null)
+  const src = landing?.cover ?? thumb
   const ref = useRef<HTMLButtonElement>(null)
   const r = rng(seedOf(z.id))
   const tilt = (r() - 0.5) * 8 // up to ±4°
@@ -29,7 +31,7 @@ export const ZineCard = memo(function ZineCard({ z, tag = 'none', onOpen, badge,
   const tagColor = tag === 'community' && comm ? comm.color : '#F158A7'
   return (
     <div className="zcard-wrap" style={{ transform: `translateX(${dx}px)`, ...style }}>
-      <button ref={ref} className="zcard" data-zine={z.id} aria-label={`${z.publish.title || 'Untitled'}${author ? ' by ' + author.name : ''}`}
+      <button ref={ref} className="zcard" data-zine={z.id} data-publish-landing={landing ? '' : undefined} aria-label={`${z.publish.title || 'Untitled'}${author ? ' by ' + author.name : ''}`}
         style={{ '--tilt': `${tilt}deg` } as CSSProperties}
         onClick={() => { haptic('tick'); onOpen?.(z, ref.current!.getBoundingClientRect()) }}>
         {src ? <img src={src} alt="" draggable={false} /> : <span className="zcard-ph" />}

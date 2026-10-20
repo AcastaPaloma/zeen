@@ -200,7 +200,7 @@ function MenuItem({ icon, label, onClick, danger }: { icon: IconName; label: str
 }
 
 /** A maker's profile. Your own lives as the last page of home's pager (`embedded`); others' open on top. */
-export default function Profile({ id, embedded = false }: { active: boolean; id?: string; embedded?: boolean }) {
+export default function Profile({ id, embedded = false, active }: { active: boolean; id?: string; embedded?: boolean }) {
   const meUser = useApp(s => s.me)
   const users = useApp(s => s.users)
   const zines = useApp(s => s.zines)
@@ -223,6 +223,17 @@ export default function Profile({ id, embedded = false }: { active: boolean; id?
   const [hdrH, setHdrH] = useState<number | null>(null)
   const hd = useRef<{ y0: number; h0: number; s0: number; y: number; t: number; v: number; moved: boolean; small: number; big: number } | null>(null)
   const dragged = useRef(false)
+  const landing = useApp(s => s.publishLanding)
+  const [prevLanding, setPrevLanding] = useState(landing)
+  // Reset the destination in the same render, before the flight measures its card.
+  if (landing && landing !== prevLanding && isMe && active) {
+    setPrevLanding(landing)
+    setTab('own')
+    setExpanded(false)
+    setHdrH(null)
+    setMenu(false)
+    setPinMode(false)
+  }
 
   // swipe right to leave a profile opened on top (home's pager handles the sideways drag for your own)
   const swipe = useSwipe(dir => {
@@ -291,7 +302,7 @@ export default function Profile({ id, embedded = false }: { active: boolean; id?
   }
 
   return (
-    <div className="pf">
+    <div className="pf" data-own-work={isMe && tab === 'own' ? '' : undefined}>
       <div className="pf-scroll" ref={scroller} {...(embedded ? {} : swipe)} onScroll={e => {
         const y = (e.target as HTMLElement).scrollTop
         setScrollY(y)
@@ -364,8 +375,12 @@ export default function Profile({ id, embedded = false }: { active: boolean; id?
             )}
             {pinMode && <p className="pin-mode-note">Tap zines to pin or unpin (up to 3).</p>}
             {pins.length > 0 && <MessyGrid zines={pins} onOpen={onOpen} scrollY={scrollY} badges={() => 'pin'} />}
-            {pins.length > 0 && rest.length > 0 && <div style={{ height: 34 }} />}
-            {rest.length > 0 && <MessyGrid zines={rest} onOpen={onOpen} scrollY={scrollY} badges={z => (z.publish.replyTo ? 'reply' : undefined)} />}
+            {rest.length > 0 && (
+              <section className="pf-zines" aria-label="Zines">
+                <div className="pf-section"><h4>Zines</h4></div>
+                <MessyGrid zines={rest} onOpen={onOpen} scrollY={scrollY} badges={z => (z.publish.replyTo ? 'reply' : undefined)} />
+              </section>
+            )}
             {!own.length && (
               <div className="empty-note">{isMe ? 'Nothing published yet. Your first zine is one fold away.' : `${user.name} hasn't published yet.`}
                 {isMe && <><br /><Button icon="plus" onClick={() => go({ name: 'create' })}>Make a zine</Button></>}

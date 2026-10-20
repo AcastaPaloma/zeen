@@ -59,7 +59,8 @@ img { -webkit-user-drag: none; user-select: none; }
   width: 100%;
   height: 100%;
   background: var(--canvas);
-  overflow: hidden;
+  /* Only the nested screens scroll; focusing a field must not shift the phone's viewport. */
+  overflow: clip;
   isolation: isolate;
   /* --u is one unit of the Figma toolbar exports, whose phone screen is 270 units wide */
   container-type: inline-size;

@@ -1,0 +1,25 @@
+.publish-landing { position: absolute; inset: 0; z-index: 90; isolation: isolate; touch-action: none; }
+.publish-landing-veil {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse at 50% 36%, rgba(255,255,255,.12), rgba(20,22,28,.26));
+}
+.publish-landing-cover {
+  position: absolute; z-index: 3; display: block; object-fit: contain;
+  transform-origin: center; will-change: transform;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.14)) drop-shadow(0 1px 2px rgba(0,0,0,.1));
+}
+.publish-impact-ring {
+  position: absolute; z-index: 2; border: 2px solid var(--accent); border-radius: 12px;
+  opacity: 0; box-shadow: 0 0 24px rgba(255,73,52,.14); pointer-events: none;
+}
+.publish-contact-shadow {
+  position: absolute; z-index: 1; height: 26px; border-radius: 50%;
+  background: #171719; filter: blur(12px); opacity: 0; pointer-events: none;
+}
+.publish-announcement {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.zcard[data-publish-landing] { visibility: hidden; }
+/* Go straight to the destination instead of sliding through the feeds beneath the flying cover. */
+.device[data-publishing] :is(.home-track, .home-head, .pf-header) { transition: none !important; }

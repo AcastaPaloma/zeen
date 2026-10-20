@@ -162,6 +162,7 @@
 
 .pf-section { padding: 0 20px; display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }
 .pf-section h4 { margin: 0; font-size: 13px; color: var(--mute); font-weight: 600; }
+.pf-zines { margin-top: 34px; }
 .drafts-row { display: flex; gap: 14px; overflow-x: auto; padding: 8px 20px 18px; scrollbar-width: none; }
 .drafts-row::-webkit-scrollbar { display: none; }
 .draft-card { flex: none; width: 92px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; }

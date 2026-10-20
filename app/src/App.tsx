@@ -3,6 +3,7 @@ import { BRAND, loadFonts, preload, TOOLS } from './lib/assets'
 import { useApp, type Route } from './lib/store'
 import { BottomNav } from './ui/BottomNav'
 import { DitherDefs, Toast } from './ui/kit'
+import { PublishLanding } from './ui/PublishLanding'
 import './ui/ui.css'
 import './screens/screens.css'
 import './create/create.css'
@@ -45,13 +46,15 @@ export default function App() {
   const { ready, stack, dir, init } = useApp()
   const me = useApp(s => s.me.id)
   const homePage = useApp(s => s.homePage)
+  const publishLanding = useApp(s => s.publishLanding)
   const [leaving, setLeaving] = useState<{ r: Route; key: number } | null>(null)
   const [prevStack, setPrevStack] = useState(stack)
   // Note a popped screen in the same render the stack changes, so it is never left out of a commit: the
   // screen that animates out is the same instance that was on top (not a fresh one replaying its entrance).
   if (stack !== prevStack) {
     setPrevStack(stack)
-    if (stack.length < prevStack.length) setLeaving({ r: prevStack[prevStack.length - 1], key: prevStack.length - 1 })
+    if (publishLanding) setLeaving(null)
+    else if (stack.length < prevStack.length) setLeaving({ r: prevStack[prevStack.length - 1], key: prevStack.length - 1 })
   }
 
   useEffect(() => {
@@ -78,7 +81,7 @@ export default function App() {
   const topR = stack[stack.length - 1]
   const onProfile = (topR.name === 'home' && homePage === 'profile') || (topR.name === 'profile' && (!topR.id || topR.id === me))
   return (
-    <div className="device">
+    <div className="device" data-publishing={publishLanding ? '' : undefined}>
       {items.map(({ r, i, leaving: out }) => {
         if (!out && !mountedIdx.has(i)) return null
         const top = !out && i === stack.length - 1
@@ -93,6 +96,7 @@ export default function App() {
       })}
       <BottomNav current={onProfile ? 'profile' : 'home'} search={topR.name === 'home' && homePage !== 'profile'} shown={onNav(topR)} />
       <Toast />
+      <PublishLanding />
       <DitherDefs />
     </div>
   )

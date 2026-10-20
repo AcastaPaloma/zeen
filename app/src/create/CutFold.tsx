@@ -532,17 +532,6 @@ export default function CutFold({ scene, doc, active, exit, next }: StepProps) {
       else ed.commit(res.doc, res.kind === 'slit' ? 'Slit' : 'Cut')
       sfx('snip'); haptic('tap')
       setLast({ kind, panel, A, B, finger, seed, pre, style: cut.style })
-      if (res.kind === 'through' && res.alt && !replace) {
-        const alt = res.alt, altPieces = res.altPieces
-        showToast('Piece cut away', {
-          label: 'Keep this piece instead',
-          run: () => {
-            scene.dropPieces(altPieces)
-            useEditor.setState({ doc: alt }); useApp.getState().saveZine(alt)
-            setLast(null)
-          },
-        }, 4000)
-      }
     } else {
       const res = applyFold(derivedOf(pre), pre, scene, panel, A, B)
       if (res && 'error' in res) { showToast(FOLD_BLOCKED[res.error]); haptic('firm'); return }

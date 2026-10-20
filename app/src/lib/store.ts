@@ -25,6 +25,13 @@ export type CreateStep = 'cut' | 'collage' | 'finalize' | 'publish'
 
 export interface Shelf { id: string; name: string; zines: string[] }
 
+export interface PublishLanding {
+  id: string
+  title: string
+  cover: string | null
+  from: { x: number; y: number; width: number; height: number }
+}
+
 interface Persisted {
   likes: string[]
   saves: string[]
@@ -52,6 +59,7 @@ interface AppState extends Persisted {
   communities: Community[]
   scrapbook: ScrapItem[]
   toast: { id: number; text: string; action?: { label: string; run: () => void } } | null
+  publishLanding: PublishLanding | null
   searchOpen: boolean
   /** where the home search field sits (client px, its top edge): the search sheet's field grows out of it */
   searchFrom: number | null
@@ -160,6 +168,7 @@ export const useApp = create<AppState>((setS, getS) => ({
   communities: COMMUNITIES,
   scrapbook: [],
   toast: null,
+  publishLanding: null,
   searchOpen: false,
   searchFrom: null,
   homePage: 'discover',
