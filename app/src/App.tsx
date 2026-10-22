@@ -100,8 +100,8 @@ export default function App() {
       <BottomNav current={onProfile ? 'profile' : 'home'} search={topR.name === 'home' && homePage !== 'profile'} shown={onNav(topR)} />
       <Toast />
       <PublishLanding />
-      {/* case-study explorations of cutting and folding, opened from beside the mockup */}
-      {exploring !== 0 && <Suspense fallback={null}><Explorations /></Suspense>}
+      {/* case-study explorations (cutting and folding, reading), opened from beside the mockup */}
+      {exploring && <Suspense fallback={null}><Explorations /></Suspense>}
       <DitherDefs />
     </div>
   )

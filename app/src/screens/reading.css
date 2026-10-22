@@ -280,7 +280,7 @@
 /* ================================================================ Read */
 
 /* The fold handle in the reader and the editor: a small, soft orb of light that breathes (no rings or rays). */
-:is(.read, .create) .fold-handle .fh-core {
+:is(.read, .create, .explore) .fold-handle .fh-core {
   width: 12px; height: 12px;
   background: radial-gradient(circle, rgba(255,255,255,0.95) 0 22%, rgba(255,255,255,0.55) 45%, rgba(255,255,255,0) 72%);
   /* white glow for dark pages, a faint grey shadow so it still reads on blank white paper */
@@ -289,8 +289,8 @@
   backdrop-filter: none; -webkit-backdrop-filter: none;
   animation: orb-breathe 2.6s ease-in-out infinite;
 }
-:is(.read, .create) .fold-handle .fh-core::before { display: none; }
-:is(.read, .create) .fold-handle.active .fh-core { transform: scale(1.3); animation: none; box-shadow: 0 0 14px 5px rgba(255,255,255,0.45), 0 1px 6px 1px rgba(0,0,0,0.18); }
+:is(.read, .create, .explore) .fold-handle .fh-core::before { display: none; }
+:is(.read, .create, .explore) .fold-handle.active .fh-core { transform: scale(1.3); animation: none; box-shadow: 0 0 14px 5px rgba(255,255,255,0.45), 0 1px 6px 1px rgba(0,0,0,0.18); }
 @keyframes orb-breathe { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.15); opacity: 1; } }
 
 

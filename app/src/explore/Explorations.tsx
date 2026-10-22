@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { applyCut, applyFold, cutPreview, foldPlan, foldPreview } from '../create/ops'
 import { haptic, sfx } from '../lib/feedback'
-import { centroid, clipLine, dist, lerp2, norm, sub } from '../lib/geom'
+import { clipLine, closestOnSegment, dist, lerp2, norm, perp, pointInMulti, sub } from '../lib/geom'
 import { cutPath, derive, newDoc, type Derived } from '../lib/paper'
 import { ME } from '../lib/samples'
 import { useApp } from '../lib/store'
@@ -9,7 +9,9 @@ import type { Crease, Frame, Vec2, ZineDoc } from '../lib/types'
 import type { CreaseMark, ZineScene } from '../three/ZineScene'
 import { Button, IconBtn, PillGroup, Segmented, Slider } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
-import { EXPLORATIONS, useExploration } from './state'
+import { KeepItGoing, StartCommunity } from './CommunityConcepts'
+import { PageByPage, TapThrough } from './ReadingExplorations'
+import { useExploration } from './state'
 import './explore.css'
 
 // Two earlier takes on cutting and folding, kept for the case study. Each works on its own blank sheet
@@ -38,7 +40,7 @@ function marks(creases: Crease[], line?: { panel: string; a: Vec2; b: Vec2; colo
 interface Paper { scene: ZineScene | null; doc: ZineDoc; commit: (d: ZineDoc) => void }
 
 /** A blank sheet with undo and start over, the top bar, and whatever the exploration puts round it. */
-function Shell({ n, panelHeight = 0, children }: { n: 1 | 2; panelHeight?: number; children: (p: Paper) => ReactNode }) {
+function Shell({ panelHeight = 0, children }: { panelHeight?: number; children: (p: Paper) => ReactNode }) {
   const show = useExploration(s => s.show)
   const [scene, setScene] = useState<ZineScene | null>(null)
   const [doc, setDoc] = useState(freshDoc)
@@ -65,7 +67,6 @@ function Shell({ n, panelHeight = 0, children }: { n: 1 | 2; panelHeight?: numbe
     })
   }, [scene])
 
-  const meta = EXPLORATIONS.find(e => e.n === n)!
   return (
     <div className="screen dots explore">
       {/* the paper fills the space between the top bar and the exploration's own controls */}
@@ -74,10 +75,10 @@ function Shell({ n, panelHeight = 0, children }: { n: 1 | 2; panelHeight?: numbe
       </div>
       <div className="top-bar">
         <PillGroup>
-          <IconBtn name="x" label="Back to the final design" onClick={() => { haptic('tick'); show(0) }} />
+          <IconBtn name="x" label="Back to the final design" onClick={() => { haptic('tick'); show(null) }} />
           <IconBtn name="undo" label="Undo" onClick={undo} disabled={!past.length} />
         </PillGroup>
-        <div className="grow ex-title"><b>Exploration {n}</b><small>{meta.name}</small></div>
+        <div className="grow" />
         <button className="chip ex-reset" onClick={reset}>Start over</button>
       </div>
       {children({ scene, doc, commit })}
@@ -138,7 +139,7 @@ function Measured() {
   }, [])
 
   return (
-    <Shell n={1} panelHeight={panelH}>
+    <Shell panelHeight={panelH}>
       {({ scene, doc, commit }) => {
         const f = doc.surfaces[0].frame
         const [A, B] = measuredLine(f, edge, dist0 / 100, deg)
@@ -210,128 +211,163 @@ function MeasuredPreview({ scene, doc, kind, A, B }: { scene: ZineScene | null; 
 
 // ---------------------------------------------------------------- 2 · dot to dot
 
-interface Dot { panel: string; p: Vec2 }
-const DOT_STEP = 1.6 // cm between dots along an edge
+/** A spot on the edge of a piece of paper (flat coords on its panel). */
+interface Spot { panel: string; p: Vec2 }
 
-/** Pin dots round the edge of every piece of paper that's showing, at most one per spot on screen. */
-function edgeDots(scene: ZineScene): Dot[] {
-  const out: Dot[] = []
-  const seen: [number, number][] = []
+/**
+ * The spot on a showing edge of the paper nearest a point on screen, if one is within `max` px. Only edges
+ * you can actually see count: the paper just inside the edge has to be that panel's, facing the camera.
+ */
+function edgeNear(scene: ZineScene, x: number, y: number, max: number): Spot | null {
+  const cands: { panel: string; a: Vec2; b: Vec2; t: number; d: number }[] = []
   for (const P of scene.d.list) {
     if (!P.region.length) continue
-    const c = centroid(P.region)
-    for (const poly of P.region) {
-      const ring = poly[0]
-      for (let i = 0; i < ring.length; i++) {
-        const a = ring[i], b = ring[(i + 1) % ring.length]
-        const n = Math.max(1, Math.round(dist(a, b) / DOT_STEP))
-        for (let k = 0; k < n; k++) {
-          const p = lerp2(a, b, k / n)
-          // the paper just inside this spot has to be this panel's, facing us
-          const q = lerp2(p, c, 0.35 / Math.max(0.35, dist(p, c)))
-          const s = scene.flatToScreen(P.id, q)
-          if (scene.pick(s[0], s[1])?.panel !== P.id) continue
-          const sp = scene.flatToScreen(P.id, p)
-          if (seen.some(o => Math.hypot(o[0] - sp[0], o[1] - sp[1]) < 16)) continue
-          seen.push(sp)
-          out.push({ panel: P.id, p })
-        }
-      }
+    for (const poly of P.region) for (const ring of poly) for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length]
+      if (dist(a, b) < 1e-6) continue
+      const sa = scene.flatToScreen(P.id, a), sb = scene.flatToScreen(P.id, b)
+      const q = closestOnSegment([x, y], sa, sb)
+      const d = Math.hypot(q[0] - x, q[1] - y)
+      if (d > max) continue
+      const t = Math.hypot(q[0] - sa[0], q[1] - sa[1]) / (Math.hypot(sb[0] - sa[0], sb[1] - sa[1]) || 1)
+      cands.push({ panel: P.id, a, b, t, d })
     }
   }
-  return out
+  cands.sort((m, n) => m.d - n.d)
+  for (const c of cands) {
+    const p = lerp2(c.a, c.b, c.t)
+    const n = norm(perp(sub(c.b, c.a)))
+    const region = scene.d.panels.get(c.panel)!.region
+    const inside: Vec2 = [p[0] + n[0] * 0.3, p[1] + n[1] * 0.3]
+    const q: Vec2 = pointInMulti(inside, region) ? inside : [p[0] - n[0] * 0.3, p[1] - n[1] * 0.3]
+    const s = scene.flatToScreen(c.panel, q)
+    if (scene.pick(s[0], s[1])?.panel === c.panel) return { panel: c.panel, p }
+  }
+  return null
 }
 
 function DotToDot() {
-  return <Shell n={2} panelHeight={90}>{p => <Dots {...p} />}</Shell>
+  return <Shell panelHeight={90}>{p => <Dots {...p} />}</Shell>
 }
 
-function Dots({ scene, doc, commit }: Paper) {
-  const [dots, setDots] = useState<Dot[]>([])
-  const [a, setA] = useState<number | null>(null)
-  const [b, setB] = useState<number | null>(null)
-  const [hint, setHint] = useState('tap a dot to start a line')
-  const layer = useRef<HTMLDivElement>(null)
-  const pop = useRef<HTMLDivElement>(null)
-  const dotsRef = useRef(dots)
-  dotsRef.current = dots
-  const ab = useRef<[number | null, number | null]>([null, null])
-  ab.current = [a, b]
+const HINT = ['click an edge to place a dot', 'now place a second dot', '']
 
-  // the dots: found again whenever the paper changes or the view settles
+/**
+ * Nothing shows until you point at the paper: move along an edge and a glowing dot follows, click to
+ * drop one there. Two dots on the same page make a line, and a little menu asks Cut or Fold.
+ */
+function Dots({ scene, doc, commit }: Paper) {
+  const [placed, setPlaced] = useState<Spot[]>([])
+  const [hover, setHover] = useState<Spot | null>(null)
+  const [hint, setHint] = useState(HINT[0])
+  const orbs = useRef<HTMLDivElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  const live = useRef<{ placed: Spot[]; hover: Spot | null }>({ placed, hover })
+  live.current = { placed, hover }
+
+  // the paper changed (an action, undo, start over): begin again
+  useEffect(() => { setPlaced([]); setHover(null); setHint(HINT[0]) }, [doc])
+
+  const place = (s: Spot) => {
+    const [first] = live.current.placed
+    haptic('tick')
+    if (!first) { setPlaced([s]); setHint(HINT[1]); return }
+    // the same spot again takes the dot away
+    if (s.panel === first.panel && dist(s.p, first.p) < 0.6) { setPlaced([]); setHint(HINT[0]); return }
+    if (s.panel !== first.panel) { setPlaced([s]); setHint('both dots need to be on the same page'); return }
+    setPlaced([first, s]); setHover(null); setHint(HINT[2])
+  }
+
   useEffect(() => {
     if (!scene) return
-    let t = 0
-    const again = (ms: number) => { clearTimeout(t); t = window.setTimeout(() => { setDots(edgeDots(scene)); setA(null); setB(null) }, ms) }
-    again(500)
-    const off = scene.on('view', () => again(220))
-    return () => { clearTimeout(t); off() }
-  }, [scene, doc])
+    const canvas = scene.renderer.domElement
+    // hovering: a dot follows the nearest edge under the pointer (mouse only, there's no hover on touch)
+    const move = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || e.buttons || live.current.placed.length >= 2) return
+      const r = canvas.getBoundingClientRect()
+      setHover(edgeNear(scene, e.clientX - r.left, e.clientY - r.top, 22))
+    }
+    const leave = () => setHover(null)
+    canvas.addEventListener('pointermove', move)
+    canvas.addEventListener('pointerleave', leave)
+    // a press near an edge drops a dot there; anywhere else still turns the paper round
+    let pending: Spot | null = null
+    scene.handlers = {
+      toolStart: p => {
+        if (live.current.placed.length >= 2) return false
+        pending = edgeNear(scene, p.x, p.y, 26)
+        return !!pending
+      },
+      toolMove: () => {},
+      toolEnd: () => { const s = pending; pending = null; if (s) place(s) },
+      toolCancel: () => { pending = null },
+    }
+    return () => {
+      canvas.removeEventListener('pointermove', move)
+      canvas.removeEventListener('pointerleave', leave)
+      scene.handlers = {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene])
 
   // keep the dots and the Cut / Fold menu pinned to the paper as it moves
   useEffect(() => {
     if (!scene) return
     return scene.on('frame', () => {
-      const els = layer.current?.children
+      const els = orbs.current?.children
       if (!els) return
-      const ds = dotsRef.current
-      for (let i = 0; i < els.length && i < ds.length; i++) {
-        const s = scene.flatToScreen(ds[i].panel, ds[i].p)
+      const { placed: ps, hover: h } = live.current
+      const spots = h ? [...ps, h] : ps
+      for (let i = 0; i < els.length && i < spots.length; i++) {
+        const s = scene.flatToScreen(spots[i].panel, spots[i].p)
         ;(els[i] as HTMLElement).style.transform = `translate(${s[0]}px, ${s[1]}px)`
       }
-      const [ia, ib] = ab.current
-      if (pop.current && ia !== null && ib !== null && ds[ia] && ds[ib]) {
-        const m = lerp2(ds[ia].p, ds[ib].p, 0.5)
-        const s = scene.flatToScreen(ds[ia].panel, m)
+      if (pop.current && ps.length === 2) {
+        const s = scene.flatToScreen(ps[0].panel, lerp2(ps[0].p, ps[1].p, 0.5))
         pop.current.style.transform = `translate(${s[0]}px, ${s[1]}px)`
       }
     })
   }, [scene])
 
-  // the line between the two dots, drawn on the paper
+  // the line: drawn between the two dots, or from the first dot to wherever the pointer is on the edge
   useEffect(() => {
     if (!scene) return
-    const da = a !== null ? dots[a] : null, db = b !== null ? dots[b] : null
-    scene.setCreaseMarks(marks(doc.creases, da && db ? { panel: da.panel, a: da.p, b: db.p, color: '#1A1A1A' } : null))
-  }, [scene, doc, dots, a, b])
+    const [a, b] = placed
+    const end = b ?? (a && hover && hover.panel === a.panel ? hover : null)
+    scene.setCreaseMarks(marks(doc.creases, a && end ? { panel: a.panel, a: a.p, b: end.p, color: '#1A1A1A' } : null))
+  }, [scene, doc, placed, hover])
   useEffect(() => () => scene?.setCreaseMarks([]), [scene])
 
-  const tap = (i: number) => {
-    haptic('tick')
-    if (a === null || b !== null) { setA(i); setB(null); setHint('now tap a second dot'); return }
-    if (i === a) { setA(null); setHint('tap a dot to start a line'); return }
-    if (dots[i].panel !== dots[a].panel) { setA(i); setHint('both dots need to be on the same page'); return }
-    setB(i); setHint('')
-  }
-  const cancel = () => { setA(null); setB(null); setHint('tap a dot to start a line') }
+  const cancel = () => { haptic('tick'); setPlaced([]); setHint(HINT[0]) }
 
   const act = (kind: Kind) => {
-    if (!scene || a === null || b === null) return
-    const { panel, p: A } = dots[a], B = dots[b].p
+    if (!scene || placed.length < 2) return
+    const [{ panel, p: A }, { p: B }] = placed
     if (kind === 'fold') {
       const res = applyFold(derive(doc, { edges: true }), doc, scene, panel, A, B)
-      if (!res || 'error' in res) { haptic('firm'); useApp.getState().showToast(res ? BLOCKED[res.error] : 'Pick dots on two different edges'); return }
+      if (!res || 'error' in res) { haptic('firm'); useApp.getState().showToast(res ? BLOCKED[res.error] : 'Put the dots on two different edges'); return }
       commit(res.doc); haptic('medium'); sfx('crease')
     } else {
       // run the cut a little past both dots so it goes right through the edge
       const u = norm(sub(B, A))
       const A2: Vec2 = [A[0] - u[0] * 1.2, A[1] - u[1] * 1.2], B2: Vec2 = [B[0] + u[0] * 1.2, B[1] + u[1] * 1.2]
       const res = applyCut(scene, doc, panel, cutPath('straight', A2, B2, [A2, B2], 0, 1, true), false)
-      if (!res) { haptic('firm'); useApp.getState().showToast('Pick dots on two different edges'); return }
+      if (!res) { haptic('firm'); useApp.getState().showToast('Put the dots on two different edges'); return }
       scene.dropPieces(res.pieces); commit(res.doc); haptic('tap'); sfx('snip')
     }
-    cancel()
   }
 
+  const shown = hover ? [...placed, hover] : placed
   return (
     <>
-      <div className="ex-dots" ref={layer}>
-        {dots.map((d, i) => (
-          <button key={`${d.panel}:${d.p[0].toFixed(2)},${d.p[1].toFixed(2)}`} className={`ex-dot ${i === a || i === b ? 'on' : ''}`}
-            aria-label={`Edge dot ${i + 1}`} onClick={() => tap(i)} />
+      <div className={`ex-orbs ${hover ? 'on-edge' : ''}`} ref={orbs}>
+        {shown.map((s, i) => (
+          <span key={i < placed.length ? `placed${i}` : 'hover'} className={`fold-handle ex-orb ${i < placed.length ? 'active' : ''}`} aria-hidden>
+            <span className="fh-core" />
+          </span>
         ))}
       </div>
-      {a !== null && b !== null && (
+      {placed.length === 2 && (
         <div className="ex-pop" ref={pop}>
           <div className="ex-pop-card">
             <button className="ex-cut" onClick={() => act('cut')}>Cut</button>
@@ -350,5 +386,7 @@ function Dots({ scene, doc, commit }: Paper) {
 export default function Explorations() {
   const which = useExploration(s => s.which)
   if (!which) return null
-  return <div className="explore-layer" key={which}>{which === 1 ? <Measured /> : <DotToDot />}</div>
+  const screen = which === 'cut1' ? <Measured /> : which === 'cut2' ? <DotToDot /> : which === 'read1' ? <PageByPage />
+    : which === 'read2' ? <TapThrough /> : which === 'com1' ? <StartCommunity /> : <KeepItGoing />
+  return <div className="explore-layer" key={which}>{screen}</div>
 }
