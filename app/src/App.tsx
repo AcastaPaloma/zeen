@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BRAND, loadFonts, preload, TOOLS } from './lib/assets'
 import { useApp, type Route } from './lib/store'
+import { useExploration } from './explore/state'
 import { BottomNav } from './ui/BottomNav'
 import { DitherDefs, Toast } from './ui/kit'
 import { PublishLanding } from './ui/PublishLanding'
@@ -18,6 +19,7 @@ const Scrapbook = lazy(() => import('./screens/Scrapbook'))
 const EditProfile = lazy(() => import('./screens/EditProfile'))
 const Intro = lazy(() => import('./screens/Intro'))
 const Create = lazy(() => import('./create/Create'))
+const Explorations = lazy(() => import('./explore/Explorations'))
 
 function Screen({ r, active }: { r: Route; active: boolean }) {
   switch (r.name) {
@@ -47,6 +49,7 @@ export default function App() {
   const me = useApp(s => s.me.id)
   const homePage = useApp(s => s.homePage)
   const publishLanding = useApp(s => s.publishLanding)
+  const exploring = useExploration(s => s.which)
   const [leaving, setLeaving] = useState<{ r: Route; key: number } | null>(null)
   const [prevStack, setPrevStack] = useState(stack)
   // Note a popped screen in the same render the stack changes, so it is never left out of a commit: the
@@ -97,6 +100,8 @@ export default function App() {
       <BottomNav current={onProfile ? 'profile' : 'home'} search={topR.name === 'home' && homePage !== 'profile'} shown={onNav(topR)} />
       <Toast />
       <PublishLanding />
+      {/* case-study explorations of cutting and folding, opened from beside the mockup */}
+      {exploring !== 0 && <Suspense fallback={null}><Explorations /></Suspense>}
       <DitherDefs />
     </div>
   )
