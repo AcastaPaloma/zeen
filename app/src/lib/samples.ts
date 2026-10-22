@@ -1,34 +1,32 @@
 import { ALBUMS, COVERS, SCRAPS, STICKERS } from './assets'
 import { uid } from './geom'
 import manifest from './manifest.json'
+import { asset, BASE } from './base'
 import { kf, newDoc, type TemplateId } from './paper'
 import type {
   Comment, Community, InkObj, Post, ScrapItem, ScrapObj, Side, TextObj, User, ZineDoc, ZineFont,
 } from './types'
 
 const M = manifest as unknown as Record<string, [number, number]>
-const aspect = (src: string) => { const s = M[src]; return s ? s[1] / s[0] : 1 }
+// (the manifest is keyed from the site root, so a deployed path is looked up without its prefix)
+const aspect = (src: string) => { const s = M[src] ?? M['/' + src.slice(BASE.length)]; return s ? s[1] / s[0] : 1 }
 
 export const ME = 'u_me'
 
 export const USERS: User[] = [
+  // you: a fresh account with nothing made yet, to start from
   {
-    id: ME, name: 'zeen.user', handle: 'zeen.user', avatar: COVERS['forever-young'],
-    bio: 'I make zines about design, student mental health and any ideas that grows in between pages',
-    header: COVERS['forever-young'], tags: ['SVSD', 'design', 'studentmentalhealth'], followers: 23, following: 41,
-    song: 'velvet-0', links: ['zeen.user.site'],
-    stickers: [
-      { src: '/assets/stickers/pink-stars.webp', x: 0.82, y: 0.12, rot: 0.2, s: 0.22 },
-      { src: '/assets/stickers/gem-heart.webp', x: 0.1, y: 0.58, rot: -0.3, s: 0.14 },
-    ],
+    id: ME, name: 'zeen.user', handle: 'zeen.user', avatar: asset('/assets/brand/avatar-blank.svg'),
+    bio: 'New here. Making my first zine.',
+    header: '#1A1A1A', tags: [], followers: 0, following: 3,
   },
-  { id: 'u_raf', name: 'raf.d', handle: 'raf.d', avatar: '/assets/scraps/face.webp', bio: 'type nerd. svsd crew. making zines about how to make zines', header: '#245AE2', tags: ['SVSD', 'type'], followers: 42, following: 12 },
-  { id: 'u_naheel', name: 'naheel.jawaid', handle: 'naheel.jawaid', avatar: '/assets/scraps/face.webp', bio: 'intern-al screaming since 2024 · design + comedy', header: '#4BA334', tags: ['design', 'humor'], followers: 318, following: 90 },
-  { id: 'u_ada', name: 'Ada', handle: 'ada.cuts', avatar: '/assets/stickers/glitter-smiley.webp', bio: 'calendar zines every month. scissors > software', header: '#F158A7', tags: ['collage', 'calendar'], followers: 756, following: 140 },
-  { id: 'u_julien', name: 'Julien', handle: 'julien.mtl', avatar: '/assets/scraps/bike-rack.webp', bio: 'found objects, montreal streets, photocopiers', header: '#1A1A1A', tags: ['montreal', 'photo'], followers: 201, following: 66 },
-  { id: 'u_mira', name: 'Mira K', handle: 'mira.k', avatar: '/assets/stickers/gem-rainbow.webp', bio: 'rave kid fanzines. levels forever', header: '#C0F6FF', tags: ['fandom', 'edm'], followers: 1203, following: 300 },
-  { id: 'u_tove', name: 'Tove', handle: 'tove.prints', avatar: '/assets/stickers/gem-flower.webp', bio: 'riso misprints and slow poems', header: '#EBEFD7', tags: ['poetry', 'riso'], followers: 88, following: 77 },
-  { id: 'u_leafy', name: 'leafy', handle: 'leafy', avatar: '/assets/scraps/grass.webp', bio: 'go outside (after reading this)', header: '#4BA334', tags: ['nature'], followers: 64, following: 20 },
+  { id: 'u_raf', name: 'raf.d', handle: 'raf.d', avatar: asset('/assets/scraps/face.webp'), bio: 'type nerd. svsd crew. making zines about how to make zines', header: '#245AE2', tags: ['SVSD', 'type'], followers: 42, following: 12 },
+  { id: 'u_naheel', name: 'naheel.jawaid', handle: 'naheel.jawaid', avatar: asset('/assets/scraps/face.webp'), bio: 'intern-al screaming since 2024 · design + comedy', header: '#4BA334', tags: ['design', 'humor'], followers: 318, following: 90 },
+  { id: 'u_ada', name: 'Ada', handle: 'ada.cuts', avatar: asset('/assets/stickers/glitter-smiley.webp'), bio: 'calendar zines every month. scissors > software', header: '#F158A7', tags: ['collage', 'calendar'], followers: 756, following: 140 },
+  { id: 'u_julien', name: 'Julien', handle: 'julien.mtl', avatar: asset('/assets/scraps/bike-rack.webp'), bio: 'found objects, montreal streets, photocopiers', header: '#1A1A1A', tags: ['montreal', 'photo'], followers: 201, following: 66 },
+  { id: 'u_mira', name: 'Mira K', handle: 'mira.k', avatar: asset('/assets/stickers/gem-rainbow.webp'), bio: 'rave kid fanzines. levels forever', header: '#C0F6FF', tags: ['fandom', 'edm'], followers: 1203, following: 300 },
+  { id: 'u_tove', name: 'Tove', handle: 'tove.prints', avatar: asset('/assets/stickers/gem-flower.webp'), bio: 'riso misprints and slow poems', header: '#EBEFD7', tags: ['poetry', 'riso'], followers: 88, following: 77 },
+  { id: 'u_leafy', name: 'leafy', handle: 'leafy', avatar: asset('/assets/scraps/grass.webp'), bio: 'go outside (after reading this)', header: '#4BA334', tags: ['nature'], followers: 64, following: 20 },
 ]
 export const userById = (id: string) => USERS.find(u => u.id === id)
 
@@ -38,7 +36,7 @@ export const COMMUNITIES: Community[] = [
     description: 'Sharing ideas, tips and memories from the Silicon Valley School of Design!! Welcoming all designers :)',
     members: 1200, perMonth: 87,
     prompt: { title: 'How to win', body: 'Make a zine about the best advice you ever got before a crit.', due: 'Sun' },
-    rules: ['Be kind in crits', 'Credit your scraps', 'No spec work asks'], mods: ['u_raf', ME], created: 'Sep 2025',
+    rules: ['Be kind in crits', 'Credit your scraps', 'No spec work asks'], mods: ['u_raf'], created: 'Sep 2025',
   },
   {
     id: 'c_mtl', tag: 'MTLZINE', name: 'Montreal Zine Fest', color: '#1A1A1A', font: 'typewriter',
@@ -116,9 +114,9 @@ function svsd(): ZineDoc {
     scrap(COVERS.svsd, 'sheet', 'back', r.back[0], { name: 'Cover' }),
     scrap(COVERS['svsd-spread'], 'sheet', 'front', { x: 0, y: 0, w: r.pw * 2, h: r.ph }, { name: 'Spread' }),
     text('1. read the brief\n2. read it again\n3. make it weird', 'front', r.pw * 0.5, r.ph * 0.86, 0.62, 'typewriter', '#ffffff', { style: 'box', align: 'left', rot: -0.04 }),
-    { ...sticker('/assets/stickers/glitter-heart.webp', 'front', r.pw * 1.78, r.ph * 0.2, 2.6), rot: 0.3 },
+    { ...sticker(asset('/assets/stickers/glitter-heart.webp'), 'front', r.pw * 1.78, r.ph * 0.2, 2.6), rot: 0.3 },
     text('see u at\nthe crit', 'back', r.back[1].x + r.pw / 2, r.ph * 0.45, 1.3, 'marker', '#245AE2', { rot: -0.08 }),
-    sticker('/assets/scraps/bird-blue.webp', 'back', r.back[1].x + r.pw * 0.55, r.ph * 0.75, 4.2, { sticker: 0.14 }),
+    sticker(asset('/assets/scraps/bird-blue.webp'), 'back', r.back[1].x + r.pw * 0.55, r.ph * 0.75, 4.2, { sticker: 0.14 }),
   ]
   d.effects = [{ id: uid('e'), type: 'grain', amount: 0.3, scope: 'zine' }]
   return d
@@ -132,11 +130,11 @@ function levels(): ZineDoc {
   const r = panelRects(d, 2)
   d.objects = [
     scrap(COVERS.levels, 'sheet', 'back', r.back[0], { name: 'Cover' }),
-    scrap('/assets/scraps/night-lights.webp', 'sheet', 'front', { x: 0, y: 0, w: r.pw * 2, h: r.ph }, { name: 'Night lights' }),
+    scrap(asset('/assets/scraps/night-lights.webp'), 'sheet', 'front', { x: 0, y: 0, w: r.pw * 2, h: r.ph }, { name: 'Night lights' }),
     text('WE\nWERE\nTHERE', 'front', r.pw, r.ph * 0.4, 2.4, 'grotesk', '#F8D647', { rot: -0.05 }),
     text('levels — 2011 — forever', 'front', r.pw, r.ph * 0.82, 0.6, 'mono', '#ffffff', {}),
-    sticker('/assets/stickers/gem-rainbow.webp', 'front', r.pw * 0.4, r.ph * 0.18, 3.2),
-    sticker('/assets/stickers/glitter-smiley.webp', 'front', r.pw * 1.65, r.ph * 0.68, 3.4),
+    sticker(asset('/assets/stickers/gem-rainbow.webp'), 'front', r.pw * 0.4, r.ph * 0.18, 3.2),
+    sticker(asset('/assets/stickers/glitter-smiley.webp'), 'front', r.pw * 1.65, r.ph * 0.68, 3.4),
     scribble('front', [r.pw * 1.3, r.ph * 0.15, r.pw * 1.45, r.ph * 0.1, r.pw * 1.65, r.ph * 0.17, r.pw * 1.85, r.ph * 0.08], '#FF6CDD', 0.12),
   ]
   d.effects = [{ id: uid('e'), type: 'halftone', amount: 0.25, scope: 'zine' }]
@@ -144,7 +142,7 @@ function levels(): ZineDoc {
 }
 
 function howZeen(): ZineDoc {
-  const d = base(ME, 'half', 'How Zeen is keeping zine culture ALIVE', { description: 'a love letter to scrappy paper', tags: ['zines', 'design'], postTo: 'c_svsd' })
+  const d = base('u_raf', 'half', 'How Zeen is keeping zine culture ALIVE', { description: 'a love letter to scrappy paper', tags: ['zines', 'design'], postTo: 'c_svsd' })
   d.id = 'z_howzeen'
   d.coverImage = COVERS['how-zeen']
   d.music = { track: 'liz-0', start: 0, volume: 0.6 }
@@ -153,9 +151,9 @@ function howZeen(): ZineDoc {
   d.objects = [
     scrap(COVERS['how-zeen'], 'sheet', 'back', r.back[0], { name: 'Cover' }),
     text('no print run.\nno paywall.\njust paper\nthat moves.', 'front', r.pw * 0.5, r.ph * 0.4, 1.0, 'typewriter', '#1A1A1A', { align: 'left' }),
-    sticker('/assets/scraps/hamster-drums.webp', 'front', r.pw * 1.5, r.ph * 0.36, 6, { sticker: 0.2, name: 'Drummer Hamster' }),
+    sticker(asset('/assets/scraps/hamster-drums.webp'), 'front', r.pw * 1.5, r.ph * 0.36, 6, { sticker: 0.2, name: 'Drummer Hamster' }),
     text('make one\ntonight', 'front', r.pw * 1.5, r.ph * 0.78, 1.5, 'ransom', '#111', {}),
-    sticker('/assets/stickers/glitter-apple.webp', 'front', r.pw * 0.75, r.ph * 0.82, 2.4),
+    sticker(asset('/assets/stickers/glitter-apple.webp'), 'front', r.pw * 0.75, r.ph * 0.82, 2.4),
     text('the end :)', 'back', r.back[1].x + r.pw / 2, r.ph / 2, 1.4, 'marker', '#FF4934'),
   ]
   return d
@@ -170,10 +168,10 @@ function montreal(): ZineDoc {
   d.surfaces[0].stock = 'newsprint'
   d.objects = [
     scrap(COVERS.montreal, 'sheet', 'front', r.front[0], { name: 'Cover' }),
-    scrap('/assets/scraps/bike-rack.webp', 'sheet', 'front', { x: r.front[1].x + 0.6, y: 1.2, w: r.pw - 1.2, h: (r.pw - 1.2) * 0.75 }, { name: 'Bike rack', rot: 0.03 }),
+    scrap(asset('/assets/scraps/bike-rack.webp'), 'sheet', 'front', { x: r.front[1].x + 0.6, y: 1.2, w: r.pw - 1.2, h: (r.pw - 1.2) * 0.75 }, { name: 'Bike rack', rot: 0.03 }),
     text('a bike rack\nshaped like\na zero', 'front', r.front[1].x + r.pw / 2, r.ph * 0.72, 0.85, 'typewriter', '#1A1A1A'),
-    scrap('/assets/scraps/gate.webp', 'sheet', 'front', { x: r.front[2].x + 0.5, y: 0.8, w: r.pw - 1, h: (r.pw - 1) * 1.33 }, { name: 'Gate', rot: -0.02 }),
-    scrap('/assets/scraps/night-lights.webp', 'sheet', 'front', { x: r.front[3].x, y: r.ph * 0.25, w: r.pw, h: r.pw * 0.67 }, { name: 'Lights' }),
+    scrap(asset('/assets/scraps/gate.webp'), 'sheet', 'front', { x: r.front[2].x + 0.5, y: 0.8, w: r.pw - 1, h: (r.pw - 1) * 1.33 }, { name: 'Gate', rot: -0.02 }),
+    scrap(asset('/assets/scraps/night-lights.webp'), 'sheet', 'front', { x: r.front[3].x, y: r.ph * 0.25, w: r.pw, h: r.pw * 0.67 }, { name: 'Lights' }),
     text('→ fin', 'front', r.front[3].x + r.pw / 2, r.ph * 0.85, 1.2, 'grotesk', '#1A1A1A'),
   ]
   d.effects = [{ id: uid('e'), type: 'photocopy', amount: 0.35, scope: 'zine' }, { id: uid('e'), type: 'grain', amount: 0.3, scope: 'zine' }]
@@ -189,15 +187,15 @@ function yellow(): ZineDoc {
   d.surfaces[0].color = '#F5F324'
   d.objects = [
     scrap(COVERS['yellow-silhouettes'], 'sheet', 'back', r.back[0], { name: 'Cover' }),
-    scrap('/assets/scraps/friends-cutout.webp', 'sheet', 'front', { x: 0.4, y: r.ph * 0.3, w: r.pw * 2 - 0.8, h: (r.pw * 2 - 0.8) * aspect('/assets/scraps/friends-cutout.webp') }, { name: 'Floor crew', shadow: true }),
+    scrap(asset('/assets/scraps/friends-cutout.webp'), 'sheet', 'front', { x: 0.4, y: r.ph * 0.3, w: r.pw * 2 - 0.8, h: (r.pw * 2 - 0.8) * aspect(asset('/assets/scraps/friends-cutout.webp')) }, { name: 'Floor crew', shadow: true }),
     text('Jolly Times', 'front', r.pw, r.ph * 0.18, 2.2, 'script', '#1A1A1A', { rot: -0.06 }),
-    sticker('/assets/stickers/pink-stars.webp', 'front', r.pw * 1.7, r.ph * 0.85, 3.4, { sticker: 0 }),
+    sticker(asset('/assets/stickers/pink-stars.webp'), 'front', r.pw * 1.7, r.ph * 0.85, 3.4, { sticker: 0 }),
   ]
   return d
 }
 
 function foreverYoung(): ZineDoc {
-  const d = base(ME, 'half', 'Forever Young', { description: 'birthday zine for my younger self', tags: ['studentmentalhealth', 'birthday'] })
+  const d = base('u_ada', 'half', 'Forever Young', { description: 'birthday zine for my younger self', tags: ['studentmentalhealth', 'birthday'] })
   d.id = 'z_forever'
   d.coverImage = COVERS['forever-young']
   d.music = { track: 'velvet-1', start: 0, volume: 0.6 }
@@ -206,8 +204,8 @@ function foreverYoung(): ZineDoc {
   d.objects = [
     scrap(COVERS['forever-young'], 'sheet', 'back', r.back[0], { name: 'Cover' }),
     text('dear me,\nit gets\nweirder\n(in a good way)', 'front', r.pw * 0.5, r.ph * 0.45, 1.05, 'script', '#245AE2', { rot: -0.05 }),
-    sticker('/assets/stickers/gem-flower.webp', 'front', r.pw * 1.5, r.ph * 0.35, 4.6),
-    sticker('/assets/stickers/glitter-heart.webp', 'front', r.pw * 1.3, r.ph * 0.75, 2.6, { rot: -0.3 }),
+    sticker(asset('/assets/stickers/gem-flower.webp'), 'front', r.pw * 1.5, r.ph * 0.35, 4.6),
+    sticker(asset('/assets/stickers/glitter-heart.webp'), 'front', r.pw * 1.3, r.ph * 0.75, 2.6, { rot: -0.3 }),
   ]
   d.effects = [{ id: uid('e'), type: 'dither', amount: 0.15, scope: 'zine' }]
   return d
@@ -222,8 +220,8 @@ function june(): ZineDoc {
   d.surfaces[0].color = '#FFD5F4'
   d.objects = [
     scrap(COVERS.june, 'sheet', 'back', r.back[0], { name: 'Cover' }),
-    sticker('/assets/scraps/bird-blue.webp', 'front', r.pw * 0.5, r.ph * 0.42, 6.4, { name: 'Cool Bird Alert' }),
-    sticker('/assets/scraps/chick.webp', 'front', r.pw * 1.45, r.ph * 0.3, 4.4, { name: 'Lil Chick' }),
+    sticker(asset('/assets/scraps/bird-blue.webp'), 'front', r.pw * 0.5, r.ph * 0.42, 6.4, { name: 'Cool Bird Alert' }),
+    sticker(asset('/assets/scraps/chick.webp'), 'front', r.pw * 1.45, r.ph * 0.3, 4.4, { name: 'Lil Chick' }),
     text('small guys\nbig month', 'front', r.pw * 1.45, r.ph * 0.72, 1.3, 'marker', '#FF4934', { rot: 0.05 }),
     scribble('front', [1, r.ph * 0.88, 3, r.ph * 0.84, 5, r.ph * 0.9, 7, r.ph * 0.85, 9, r.ph * 0.9], '#1A1A1A', 0.1),
   ]
@@ -236,11 +234,11 @@ function grass(): ZineDoc {
   d.music = { track: 'velvet-2', start: 0, volume: 0.5 }
   const r = panelRects(d, 2)
   d.objects = [
-    scrap('/assets/scraps/grass.webp', 'sheet', 'back', r.back[0], { name: 'Grass' }),
+    scrap(asset('/assets/scraps/grass.webp'), 'sheet', 'back', r.back[0], { name: 'Grass' }),
     text('Touch', 'back', r.back[0].x + r.pw * 0.38, r.ph * 0.2, 2.1, 'script', '#ffffff', { rot: -0.08 }),
     text('some', 'back', r.back[0].x + r.pw * 0.62, r.ph * 0.45, 1.8, 'script', '#ffffff', { rot: 0.05 }),
     text('grass', 'back', r.back[0].x + r.pw * 0.5, r.ph * 0.78, 3.4, 'serif', '#ffffff', { rot: -0.04 }),
-    scrap('/assets/scraps/grass.webp', 'sheet', 'front', { x: 0, y: 0, w: r.pw * 2, h: r.ph }, { name: 'Grass' }),
+    scrap(asset('/assets/scraps/grass.webp'), 'sheet', 'front', { x: 0, y: 0, w: r.pw * 2, h: r.ph }, { name: 'Grass' }),
     text('ok now\ngo outside', 'front', r.pw, r.ph / 2, 2, 'marker', '#ffffff', { style: 'outline' }),
   ]
   return d
@@ -259,7 +257,7 @@ function internal(): ZineDoc {
     text('5 YEARS\nEXPERIENCE\nAT 20 YO', 'back', c.x + c.w / 2, c.y + 10.5, 1.15, 'grotesk', '#F8D647'),
     text('day 1: what is a jira', 'front', r.pw * 0.5, r.ph * 0.3, 0.7, 'typewriter', '#fff'),
     text('day 90: i am the jira', 'front', r.pw * 1.5, r.ph * 0.7, 0.7, 'typewriter', '#fff'),
-    sticker('/assets/scraps/face.webp', 'front', r.pw * 1.5, r.ph * 0.35, 4.2),
+    sticker(asset('/assets/scraps/face.webp'), 'front', r.pw * 1.5, r.ph * 0.35, 4.2),
   ]
   d.effects = [{ id: uid('e'), type: 'scan', amount: 0.35, scope: 'zine' }]
   return d
@@ -280,7 +278,7 @@ function naheel(): ZineDoc {
   d.objects = [
     { ...scribble('back', star, '#F158A7', 2.4, false), name: 'Star' },
     text('naheel\n   Jawaid', 'back', c.x + c.w / 2, c.y + 3.4, 1.7, 'script', '#1A1A1A', { rot: -0.06 }),
-    sticker('/assets/scraps/face.webp', 'back', c.x + c.w / 2, c.y + c.h * 0.62, 4.6, { sticker: 0.1 }),
+    sticker(asset('/assets/scraps/face.webp'), 'back', c.x + c.w / 2, c.y + c.h * 0.62, 4.6, { sticker: 0.1 }),
     text('hi. i make things\nand then i make\nzines about\nmaking things', 'front', r.pw, r.ph / 2, 1.0, 'typewriter', '#ffffff'),
   ]
   return d
@@ -348,13 +346,13 @@ export function sampleZines(): ZineDoc[] {
 export const SAMPLE_COMMENTS: Omit<Comment, 'id'>[] = [
   { zine: 'z_svsd', user: 'u_naheel', text: 'step 3 is so real', at: Date.now() - 36e5 * 5, likes: 12 },
   { zine: 'z_svsd', user: 'u_ada', text: 'the dog sticker unfolding is so good', at: Date.now() - 36e5 * 9, likes: 4 },
-  { zine: 'z_svsd', user: ME, text: 'printing this for the studio wall', at: Date.now() - 36e5 * 20, likes: 2 },
+  { zine: 'z_svsd', user: 'u_mira', text: 'printing this for the studio wall', at: Date.now() - 36e5 * 20, likes: 2 },
   { zine: 'z_june', user: 'u_mira', text: 'cool bird alert 🐦', at: Date.now() - 36e5 * 2, likes: 30 },
   { zine: 'z_mtl', user: 'u_tove', text: 'i know that gate!!', at: Date.now() - 36e5 * 30, likes: 6 },
 ]
 
 export const SAMPLE_POSTS: Omit<Post, 'id'>[] = [
-  { community: 'c_svsd', user: 'u_raf', text: 'Crit night Thursday — bring a zine, leave with three. Weekly prompt is up: "How to win".', at: Date.now() - 36e5 * 3, likes: 41, pinned: true, replies: [{ user: ME, text: 'im in!', at: Date.now() - 36e5 * 2 }] },
+  { community: 'c_svsd', user: 'u_raf', text: 'Crit night Thursday — bring a zine, leave with three. Weekly prompt is up: "How to win".', at: Date.now() - 36e5 * 3, likes: 41, pinned: true, replies: [{ user: 'u_julien', text: 'im in!', at: Date.now() - 36e5 * 2 }] },
   { community: 'c_svsd', user: 'u_naheel', text: 'anyone have a good halftone setting for faces? mine look like soup', at: Date.now() - 36e5 * 7, likes: 9, replies: [{ user: 'u_ada', text: 'halftone at 40 + grain at 20, trust', at: Date.now() - 36e5 * 6 }] },
   { community: 'c_svsd', user: 'u_ada', text: 'made a reply zine to raf\'s comp guide', zine: 'z_june', at: Date.now() - 36e5 * 26, likes: 22, replies: [] },
   { community: 'c_mtl', user: 'u_julien', text: 'table 14 this year. swapping montreal found-object zines for anything with birds', at: Date.now() - 36e5 * 12, likes: 15, replies: [] },

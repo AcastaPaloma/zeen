@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BRAND, loadFonts, preload, TOOLS } from './lib/assets'
 import { useApp, type Route } from './lib/store'
-import { useExploration } from './explore/state'
+import { EXPLORATIONS_ON, useExploration } from './explore/state'
 import { BottomNav } from './ui/BottomNav'
 import { DitherDefs, Toast } from './ui/kit'
 import { PublishLanding } from './ui/PublishLanding'
@@ -101,7 +101,7 @@ export default function App() {
       <Toast />
       <PublishLanding />
       {/* case-study explorations (cutting and folding, reading), opened from beside the mockup */}
-      {exploring && <Suspense fallback={null}><Explorations /></Suspense>}
+      {EXPLORATIONS_ON && exploring && <Suspense fallback={null}><Explorations /></Suspense>}
       <DitherDefs />
     </div>
   )

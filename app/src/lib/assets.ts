@@ -1,4 +1,6 @@
-const A = '/assets'
+import { asset } from './base'
+
+const A = asset('/assets')
 
 export const STICKERS = [
   'glitter-heart', 'glitter-smiley', 'gem-rainbow', 'glitter-apple', 'gem-flower', 'gem-heart', 'flower-smile', 'pink-stars',

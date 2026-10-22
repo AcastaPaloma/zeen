@@ -105,16 +105,14 @@ function withRenamedScraps(z: ZineDoc): ZineDoc {
   return { ...z, objects: z.objects.map(o => (o.kind === 'scrap' && RENAMED_SCRAPS[o.src] ? { ...o, src: RENAMED_SCRAPS[o.src], gif: true } : o)) }
 }
 
-const LS_KEY = 'zeen.state.v1'
+// v2: everyone starts from a blank account (nothing made, saved or pinned yet)
+const LS_KEY = 'zeen.state.v2'
 const IDB_ZINES = 'zeen.zine.'
 const IDB_SCRAPS = 'zeen.scraps.v1'
 
 const defaults = (): Persisted => ({
-  likes: [], saves: ['z_levels', 'z_june', 'z_mtl', 'z_rewind'],
-  shelves: [
-    { id: 'sh_all', name: 'Favourites', zines: ['z_levels', 'z_june'] },
-    { id: 'sh_ref', name: 'Design reference', zines: ['z_mtl', 'z_rewind'] },
-  ],
+  likes: [], saves: [],
+  shelves: [{ id: 'sh_all', name: 'Favourites', zines: [] }],
   following: ['u_raf', 'u_naheel', 'u_ada'],
   joined: ['c_svsd', 'c_small'],
   me: USERS[0],
@@ -124,7 +122,7 @@ const defaults = (): Persisted => ({
   seenIntro: false,
   seenCoach: {},
   recentSearches: ['halftone', 'small guys', 'riot grrrl'],
-  pinned: ['z_howzeen'],
+  pinned: [],
   downloads: [],
   stickersOnZines: {},
 })

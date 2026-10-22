@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties } from 'react'
 import { COVERS, STICKERS } from '../lib/assets'
+import { asset } from '../lib/base'
 import { haptic, sfx } from '../lib/feedback'
 import { clamp } from '../lib/geom'
 import { useApp } from '../lib/store'
@@ -11,7 +12,7 @@ import './social.css'
 const COLORS = ['#1A1A1A', '#245AE2', '#FF4934', '#4BA334', '#F8D647', '#F158A7', '#C0F6FF', '#EBEFD7']
 const IMAGES = [
   COVERS['forever-young'], COVERS.levels, COVERS['how-zeen'], COVERS.june,
-  '/assets/scraps/grass.webp', '/assets/scraps/night-lights.webp', '/assets/scraps/gate.webp', '/assets/scraps/orcas.webp', '/assets/scraps/friends.webp',
+  asset('/assets/scraps/grass.webp'), asset('/assets/scraps/night-lights.webp'), asset('/assets/scraps/gate.webp'), asset('/assets/scraps/orcas.webp'), asset('/assets/scraps/friends.webp'),
 ]
 const isColor = (h: string) => /^#|^rgb|^hsl/.test(h)
 

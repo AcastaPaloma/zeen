@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { BRAND } from '../lib/assets'
+import { asset } from '../lib/base'
 import { haptic, sfx } from '../lib/feedback'
 import { uid } from '../lib/geom'
 import { newDoc } from '../lib/paper'
@@ -36,17 +37,17 @@ function introDoc(): ZineDoc {
     text('1', 'front', cx(0), ph * 0.18, 2.4, 'grotesk', '#FF4934'),
     text('Make zines\nthat move.', 'front', cx(0), ph * 0.42, 1.25, 'grotesk', '#1A1A1A'),
     text('ink that boils, stickers\nthat wiggle, a soundtrack.', 'front', cx(0), ph * 0.62, 0.55, 'typewriter', '#555'),
-    sticker('/assets/scraps/hamster-drums.webp', 'front', cx(0), ph * 0.82, 4, 4, -0.08),
+    sticker(asset('/assets/scraps/hamster-drums.webp'), 'front', cx(0), ph * 0.82, 4, 4, -0.08),
     // the right door's back, seen next
     text('2', 'back', cx(0), ph * 0.18, 2.4, 'grotesk', '#245AE2'),
     text('Fold, cut,\ncollage.', 'back', cx(0), ph * 0.42, 1.25, 'grotesk', '#1A1A1A'),
     text('real paper physics,\nmade for your thumb.', 'back', cx(0), ph * 0.62, 0.55, 'typewriter', '#555'),
-    sticker('/assets/scraps/bird-blue.webp', 'back', cx(0), ph * 0.82, 3.6, 4.2, 0.1),
+    sticker(asset('/assets/scraps/bird-blue.webp'), 'back', cx(0), ph * 0.82, 3.6, 4.2, 0.1),
     // fully open: centre + right panel fronts
     text('3', 'front', cx(1), ph * 0.18, 2.4, 'grotesk', '#4BA334'),
     text('Share with\nyour scene.', 'front', cx(1), ph * 0.42, 1.25, 'grotesk', '#1A1A1A'),
     text('communities, reply zines,\na shelf of your favourites.', 'front', cx(1), ph * 0.62, 0.55, 'typewriter', '#555'),
-    sticker('/assets/stickers/glitter-heart.webp', 'front', cx(1), ph * 0.83, 3.2, 3.2, -0.2),
+    sticker(asset('/assets/stickers/glitter-heart.webp'), 'front', cx(1), ph * 0.83, 3.2, 3.2, -0.2),
     text('ready?', 'front', cx(2), ph * 0.4, 2.2, 'script', '#FF4934', { rot: -0.08 }),
     text('make one\ntonight', 'front', cx(2), ph * 0.66, 1.1, 'ransom', '#111'),
   ]

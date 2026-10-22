@@ -72,6 +72,9 @@ img { -webkit-user-drag: none; user-select: none; }
 .device input, .device textarea, .device [contenteditable] { -webkit-user-select: text; user-select: text; }
 
 @media (min-width: 600px) {
+  /* behind the phone and the video button: white fading down into a dithered orange (brand/backdrop.webp),
+     shown at 40% (a 60% white wash over it) */
+  body { background: linear-gradient(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.6)), #fff url('/assets/brand/backdrop.webp') center bottom / cover no-repeat; }
   #root { display: grid; place-items: center; height: 100%; width: 100%; }
   .phone-preview {
     width: min(450px, calc((100vh - 32px) * 900 / 1840), calc(100vw - 32px));

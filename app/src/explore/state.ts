@@ -6,6 +6,9 @@ import { create } from 'zustand'
  */
 export type Exploration = 'cut1' | 'cut2' | 'read1' | 'read2' | 'com1' | 'com2' | null
 
+/** The site shows just the phone. The explorations come back with ?explore on the address, for the case study. */
+export const EXPLORATIONS_ON = new URLSearchParams(window.location.search).has('explore')
+
 export const useExploration = create<{ which: Exploration; show: (w: Exploration) => void }>(set => ({
   which: null,
   show: which => set({ which }),
