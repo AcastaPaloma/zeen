@@ -2,7 +2,7 @@ import { music } from '../lib/music'
 import { audio } from '../lib/feedback'
 import { jsPDF } from 'jspdf'
 import { applyPalette, GIFEncoder, quantize } from 'gifenc'
-import { loadFonts, PAPER, preload } from '../lib/assets'
+import { BRAND, loadFonts, PAPER, preload } from '../lib/assets'
 import { composeSide } from '../lib/compose'
 import { applyEffects, fxFor } from '../lib/effects'
 import { flatToPage } from '../lib/paper'
@@ -90,15 +90,15 @@ function dotGrid(ctx: CanvasRenderingContext2D, W: number, H: number, bg: string
   }
 }
 
+// the Zeen wordmark for the corner of exported videos and GIFs (loaded ahead, exports start on a tap)
+const logo = typeof Image !== 'undefined' ? Object.assign(new Image(), { src: BRAND.logo }) : null
+
 function mark(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  const s = Math.round(Math.min(W, H) * 0.06)
+  if (!logo?.complete || !logo.naturalWidth) return
+  const h = Math.round(Math.min(W, H) * 0.05), w = h * (logo.naturalWidth / logo.naturalHeight)
   ctx.save()
-  ctx.font = `${s}px "Pinyon Script", cursive`
-  ctx.fillStyle = 'rgba(26,26,26,0.75)'
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillText('Zeen', W - s * 3.1, H - s * 0.9)
-  ctx.fillStyle = '#FF4934'
-  ctx.beginPath(); ctx.arc(W - s * 0.75, H - s * 1.05, s * 0.09, 0, Math.PI * 2); ctx.fill()
+  ctx.globalAlpha = 0.8
+  ctx.drawImage(logo, W - w - h * 0.8, H - h * 1.8, w, h)
   ctx.restore()
 }
 

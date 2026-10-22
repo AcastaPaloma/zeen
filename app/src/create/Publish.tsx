@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { trackById } from '../lib/assets'
-import { haptic, sfx } from '../lib/feedback'
+import { haptic } from '../lib/feedback'
 import { ME } from '../lib/samples'
 import { useApp } from '../lib/store'
 import { renderThumb } from '../lib/thumbs'
+import { zineScreenBox } from '../screens/Preview'
 import type { Visibility, ZineDoc } from '../lib/types'
 import { Icon } from '../ui/Icon'
-import { Avatar, Button, Chip, IconBtn, PillGroup, Row, Segmented, Toggle } from '../ui/kit'
+import { Avatar, Button, Chip, Grabber, IconBtn, PillGroup, Row, Segmented, Toggle, usePanelDrag } from '../ui/kit'
 import type { StepProps } from './Create'
 import { useEditor } from './editor'
 import { exportZine, type Aspect, type ExportKind } from './export'
@@ -22,16 +23,23 @@ export default function Publish({ scene, doc, exit }: StepProps) {
   const [tagDraft, setTagDraft] = useState('')
   const [aspect, setAspect] = useState<Aspect>('9:16')
   const [busy, setBusy] = useState<{ kind: ExportKind; p: number } | null>(null)
-  const [stamping, setStamping] = useState(false)
+  const [posting, setPosting] = useState(false)
+  const postingRef = useRef(false)
+  // the sheet drags between nearly full, its resting height and tucked away under the zine
+  const panel = usePanelDrag([0.12, 0.37, 0.8], 0.37)
 
-  // the zine sits small at the top, posed at its cover keyframe
+  // the zine sits in the space above the sheet, posed at its cover keyframe
   useEffect(() => {
     if (!scene) return
     const el = scene.el
     el.style.top = 'calc(var(--safe-top) + 84px)'
-    el.style.bottom = '63%'
+    el.style.bottom = `${Math.round((1 - panel.top) * 100)}%`
     scene.fitMargin = 1.25
     scene.resize()
+  }, [scene, panel.top])
+  useEffect(() => {
+    if (!scene) return
+    const el = scene.el
     return () => { el.style.top = ''; el.style.bottom = ''; scene.fitMargin = null; scene.resize() }
   }, [scene])
   useEffect(() => {
@@ -81,7 +89,10 @@ export default function Publish({ scene, doc, exit }: StepProps) {
 
   const post = async () => {
     const title = p.title.trim()
-    if (!title || stamping) return
+    if (!title || postingRef.current) return
+    postingRef.current = true
+    setPosting(true)
+    haptic('tap')
     const final: ZineDoc = {
       ...doc, status: 'published', publishedAt: Date.now(), author: ME,
       stats: { likes: 0, saves: 0, reads: 0, comments: 0 },
@@ -90,11 +101,23 @@ export default function Publish({ scene, doc, exit }: StepProps) {
     ed.commit(final, 'Publish')
     app.saveZine(final)
     if (final.publish.postTo) app.addPost(final.publish.postTo, `New zine: ${title}`, final.id)
-    setStamping(true)
-    setTimeout(() => { sfx('stamp'); haptic('firm') }, 240)
     const saved = useApp.getState().zines[final.id] ?? final
-    await Promise.all([Promise.race([renderThumb(saved).catch(() => null), wait(1200)]), wait(1150)])
-    useApp.setState({ stack: [{ name: 'home' }, { name: 'preview', id: final.id, from: null }], dir: 1 })
+    const selectedCover = document.querySelector<HTMLImageElement>('.publish .cover-opt.on img')?.src
+    const cover = await Promise.race([renderThumb(saved).catch(() => null), wait(900).then(() => null)])
+      ?? selectedCover ?? saved.coverImage ?? null
+    // If the editor was closed while the cover rendered, leave the user's navigation alone.
+    if (useApp.getState().stack.at(-1)?.name !== 'create' || useEditor.getState().doc?.id !== final.id) return
+    const device = document.querySelector<HTMLElement>('.device')!
+    const host = device.getBoundingClientRect()
+    const stage = scene?.canvas.getBoundingClientRect()
+    const box = zineScreenBox(scene)
+    const from = stage && box
+      ? { x: stage.left - host.left + box.x0, y: stage.top - host.top + box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 }
+      : { x: host.width * 0.3, y: host.height * 0.14, width: host.width * 0.4, height: host.height * 0.22 }
+    useApp.setState({
+      stack: [{ name: 'home' }], homePage: 'profile', dir: -1, searchOpen: false,
+      publishLanding: { id: final.id, title, cover, from },
+    })
   }
 
   const VIS: { value: Visibility; label: string }[] = [
@@ -108,7 +131,7 @@ export default function Publish({ scene, doc, exit }: StepProps) {
   ]
 
   return (
-    <div className="step-ui publish">
+    <div className="step-ui publish" aria-busy={posting} inert={posting}>
       <div className="top-bar">
         <PillGroup>
           <IconBtn name="back" label="Save and exit" onClick={exit} />
@@ -116,10 +139,11 @@ export default function Publish({ scene, doc, exit }: StepProps) {
           <IconBtn name="redo" label="Redo" onClick={ed.redo} disabled={!ed.future.length} />
         </PillGroup>
         <div className="grow" />
-        <button className="post-mini" disabled={!p.title.trim()} onClick={post}>Post</button>
+        <button className="post-mini" disabled={!p.title.trim() || posting} onClick={post}>{posting ? 'Posting…' : 'Post'}</button>
       </div>
 
-      <section className="pub-sheet" aria-label="Publish">
+      <section className="pub-sheet" aria-label="Publish" data-panel style={panel.style}>
+        <Grabber {...panel.bind} label="Drag to resize the publish sheet" />
         <div className="pub-scroll scroll">
           <label className="field">
             <span className="field-head"><b>Title</b><small className={p.title.length > 54 ? 'warn' : ''}>{p.title.length}/60</small></span>
@@ -254,17 +278,11 @@ export default function Publish({ scene, doc, exit }: StepProps) {
           <div className="pub-spacer" />
         </div>
         <div className="pub-foot">
-          <Button className="post-btn" disabled={!p.title.trim() || stamping} onClick={post}>
-            {p.title.trim() ? (p.postTo ? `Post to #${app.communities.find(c => c.id === p.postTo)?.tag}` : 'Post zine') : 'Add a title to post'}
+          <Button className="post-btn" disabled={!p.title.trim() || posting} onClick={post}>
+            {posting ? 'Posting…' : p.title.trim() ? (p.postTo ? `Post to #${app.communities.find(c => c.id === p.postTo)?.tag}` : 'Post zine') : 'Add a title to post'}
           </Button>
         </div>
       </section>
-
-      {stamping && (
-        <div className="stamp-wrap" aria-live="assertive">
-          <div className="stamp"><span>POSTED</span><small>{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</small></div>
-        </div>
-      )}
     </div>
   )
 }

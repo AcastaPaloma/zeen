@@ -5,13 +5,62 @@ import { clamp, rng } from '../lib/geom'
 import { music, waveform } from '../lib/music'
 import type { ZineDoc } from '../lib/types'
 import { Icon } from '../ui/Icon'
-import { DitherImg, Sheet, Slider } from '../ui/kit'
+import { Sheet, Slider, useDominantColor } from '../ui/kit'
 import './collage-sheets.css'
 
 const SPAN = 60 // seconds the scrubber covers
 const PREVIEW = 15
 
-/** Scattered, overlapping album covers — like a pile of records on the floor. */
+/** How much the window squeezes when pushed past an end (0..0.3), for an overdrag of `px`. */
+const squeezeFor = (px: number) => (0.3 * px) / (px + 90)
+/** How much it stretches along the drag at a speed of `v` px/ms. */
+const stretchFor = (v: number) => Math.min(0.32, Math.abs(v) * 0.16)
+
+/**
+ * The 15-second window's feel: it's a little piece of jelly. Dragged fast it stretches along the drag and
+ * thins out; pushed against either end of the song it squashes against the wall and bulges; let go, it
+ * springs back with a wobble. Two springs (stretch, squeeze) drive a scale on the window, nothing else.
+ */
+function useJelly() {
+  const win = useRef<HTMLSpanElement>(null)
+  const st = useRef({ s: 0, sv: 0, sT: 0, q: 0, qv: 0, qT: 0, wall: 0 as -1 | 0 | 1, live: false, raf: 0, last: 0 })
+  const frame = (now: number) => {
+    const j = st.current
+    const dt = Math.min(0.032, (now - j.last) / 1000 || 0.016)
+    j.last = now
+    // underdamped, so letting go overshoots once and settles
+    j.sv += ((j.sT - j.s) * 520 - j.sv * 20) * dt; j.s += j.sv * dt
+    j.qv += ((j.qT - j.q) * 520 - j.qv * 18) * dt; j.q += j.qv * dt
+    const el = win.current
+    if (el) {
+      const sx = (1 + j.s) * (1 - j.q), sy = (1 - j.s * 0.45) * (1 + j.q * 0.6)
+      el.style.transformOrigin = j.wall < 0 ? 'left center' : j.wall > 0 ? 'right center' : 'center'
+      el.style.transform = `scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`
+    }
+    const still = Math.abs(j.s - j.sT) + Math.abs(j.sv) + Math.abs(j.q - j.qT) + Math.abs(j.qv) < 1e-3
+    if (j.live || !still) { j.raf = requestAnimationFrame(frame); return }
+    j.raf = 0
+    if (el && !j.sT && !j.qT) { el.style.transform = ''; j.wall = 0 }
+  }
+  const kick = () => { const j = st.current; if (!j.raf) { j.last = performance.now(); j.raf = requestAnimationFrame(frame) } }
+  useEffect(() => () => cancelAnimationFrame(st.current.raf), [])
+  return {
+    ref: win,
+    /** while dragging: the drag's speed (px/ms), and how far past an end it's being pushed (px, - for the start) */
+    set(v: number, over: number) {
+      const j = st.current
+      j.live = true
+      j.sT = over ? 0 : stretchFor(v)
+      j.qT = squeezeFor(Math.abs(over))
+      if (over) j.wall = over < 0 ? -1 : 1
+      else if (j.q < 0.01) j.wall = 0
+      kick()
+    },
+    release() { const j = st.current; j.live = false; j.sT = 0; j.qT = 0; kick() },
+  }
+}
+
+/** Scattered, overlapping covers — like a pile of records on the floor. Each cover is one song. */
 function layout(albums: Album[]) {
   const r = rng(42)
   return albums.map((a, i) => {
@@ -36,6 +85,10 @@ export function MusicPicker({ open, onClose, value, onChange }: {
   const [volume, setVolume] = useState(70)
   const [playing, setPlaying] = useState(false)
   const wave = useRef<HTMLDivElement>(null)
+  const jelly = useJelly()
+  const [held, setHeld] = useState(false)
+  // dragging the window: where it was grabbed (px from its left edge), and the finger's last x and time
+  const drag = useRef<{ id: number; grab: number; x: number; t: number; v: number; atWall: boolean } | null>(null)
 
   useEffect(() => {
     if (!open) { music.stop(); return }
@@ -67,10 +120,20 @@ export function MusicPicker({ open, onClose, value, onChange }: {
     setTrack(id)
     play(id)
   }
-  const scrub = (clientX: number) => {
-    const r = wave.current!.getBoundingClientRect()
-    const s = Math.round(clamp((clientX - r.left) / r.width, 0, 1) * (SPAN - PREVIEW))
-    setStart(s)
+  /** Move the window so the grab point sits under the finger; past either end it stays put and squashes. */
+  const dragTo = (clientX: number) => {
+    const d = drag.current, el = wave.current
+    if (!d || !el) return
+    const r = el.getBoundingClientRect()
+    const w = (PREVIEW / SPAN) * r.width, max = r.width - w
+    const left = clientX - r.left - d.grab
+    const over = left < 0 ? left : left > max ? left - max : 0
+    const now = performance.now()
+    d.v = d.v * 0.6 + ((clientX - d.x) / Math.max(8, now - d.t)) * 0.4
+    d.x = clientX; d.t = now
+    if (!!over !== d.atWall) { d.atWall = !!over; if (over) haptic('tick') }
+    jelly.set(d.v, over)
+    setStart(Math.round((clamp(left, 0, max) / r.width) * SPAN * 10) / 10)
   }
   const confirm = () => {
     if (!track) return
@@ -81,6 +144,7 @@ export function MusicPicker({ open, onClose, value, onChange }: {
   }
 
   const bars = useMemo(() => (track ? waveform(track, 56) : []), [track])
+  const coverColor = useDominantColor(sel?.album.cover)
 
   return (
     <Sheet open={open} onClose={() => { music.stop(); onClose() }} height="tall" className="music-sheet">
@@ -92,14 +156,21 @@ export function MusicPicker({ open, onClose, value, onChange }: {
         <button className="chip" onClick={() => { music.stop(); onChange(null); onClose() }}>No music</button>
       </div>
 
-      <div className={`record-pile ${album ? 'has-sel' : ''}`} style={{ height: Math.ceil(placed.length / 2) * 232 + 120 }}>
+      {/* while an album is open, any tap on the pile just closes it */}
+      <div className={`record-pile ${album ? 'has-sel' : ''}`} style={{ height: Math.ceil(placed.length / 2) * 232 + 120 }}
+        onClick={() => { if (album) { haptic('tick'); setAlbum(null) } }}>
         {placed.map(({ a, rot, x, y, capRot }) => {
           const on = album === a.id
           const first = sel && sel.album.id === a.id ? sel.track : a.tracks[0]
           return (
             <button key={a.id} className={`record ${on ? 'on' : ''}`}
               style={{ left: `${x}%`, top: y, '--rot': `${rot}deg` } as CSSProperties}
-              onClick={() => { haptic('tap'); setAlbum(on ? null : a.id); if (!on && !(sel && sel.album.id === a.id)) pick(a.tracks[0].id) }}
+              onClick={e => {
+                e.stopPropagation()
+                if (album) { haptic('tick'); setAlbum(null); return }
+                haptic('tap'); setAlbum(a.id)
+                if (!(sel && sel.album.id === a.id)) pick(a.tracks[0].id)
+              }}
               aria-label={`${a.title} by ${a.artist}`} aria-pressed={on}>
               <img src={a.cover} alt="" draggable={false} />
               <span className="record-cap" style={{ transform: `rotate(${capRot}deg)` }}>
@@ -110,45 +181,37 @@ export function MusicPicker({ open, onClose, value, onChange }: {
         })}
       </div>
 
-      {open_ && (
+      {/* the chosen song: just pick which 15 seconds play */}
+      {open_ && track && sel?.album.id === open_.id && (
         <div className="tracklist" key={open_.id}>
-          <div className="tl-head">
-            <b>{open_.title}</b><small>{open_.artist}</small>
+          <div className={`wave ${held ? 'dragging' : ''}`} ref={wave} role="slider" aria-label="Start point" aria-valuenow={start} aria-valuemin={0} aria-valuemax={SPAN - PREVIEW} tabIndex={0}
+            onKeyDown={e => { if (e.key === 'ArrowRight') setStart(s => Math.min(SPAN - PREVIEW, Math.floor(s) + 1)); if (e.key === 'ArrowLeft') setStart(s => Math.max(0, Math.ceil(s) - 1)) }}
+            onPointerDown={e => {
+              if (e.pointerType === 'mouse' && e.button !== 0) return
+              try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+              const r = e.currentTarget.getBoundingClientRect()
+              const w = (PREVIEW / SPAN) * r.width, l = (start / SPAN) * r.width, x = e.clientX - r.left
+              // grabbed inside the window: it moves from where it was held; outside: it jumps there, centred
+              drag.current = { id: e.pointerId, grab: x >= l && x <= l + w ? x - l : w / 2, x: e.clientX, t: performance.now(), v: 0, atWall: false }
+              setHeld(true)
+              dragTo(e.clientX)
+            }}
+            onPointerMove={e => { if (drag.current?.id === e.pointerId) dragTo(e.clientX) }}
+            onPointerUp={e => { if (drag.current?.id !== e.pointerId) return; drag.current = null; setHeld(false); jelly.release(); play(track, start) }}
+            onPointerCancel={e => { if (drag.current?.id !== e.pointerId) return; drag.current = null; setHeld(false); jelly.release() }}>
+            {bars.map((b, i) => {
+              const t = (i / bars.length) * SPAN
+              const inWin = t >= start && t < start + PREVIEW
+              return <span key={i} className={inWin ? 'in' : ''} style={{ height: `${b * 100}%` }} />
+            })}
+            <span className="wave-win" ref={jelly.ref} style={{ left: `${(start / SPAN) * 100}%`, width: `${(PREVIEW / SPAN) * 100}%` }} />
           </div>
-          {open_.tracks.map(t => {
-            const on = track === t.id
-            return (
-              <button key={t.id} className={`tl-row ${on ? 'on' : ''}`} onClick={() => pick(t.id)} aria-pressed={on}>
-                {on ? <img src={open_.cover} alt="" /> : <DitherImg src={open_.cover} color="#9A9A9A" size={36} scale={1} />}
-                <span>{t.title}</span>
-                <small>{t.bpm} bpm</small>
-                {on && playing && <span className="eq" aria-hidden><i /><i /><i /></span>}
-              </button>
-            )
-          })}
-          {track && sel?.album.id === open_.id && (
-            <>
-              <div className="wave" ref={wave} role="slider" aria-label="Start point" aria-valuenow={start} aria-valuemin={0} aria-valuemax={SPAN - PREVIEW} tabIndex={0}
-                onKeyDown={e => { if (e.key === 'ArrowRight') setStart(s => Math.min(SPAN - PREVIEW, s + 1)); if (e.key === 'ArrowLeft') setStart(s => Math.max(0, s - 1)) }}
-                onPointerDown={e => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); scrub(e.clientX) }}
-                onPointerMove={e => { if (e.buttons || e.pointerType === 'touch') scrub(e.clientX) }}
-                onPointerUp={() => play(track, start)}>
-                {bars.map((b, i) => {
-                  const t = (i / bars.length) * SPAN
-                  const inWin = t >= start && t < start + PREVIEW
-                  return <span key={i} className={inWin ? 'in' : ''} style={{ height: `${b * 100}%` }} />
-                })}
-                <span className="wave-win" style={{ left: `${(start / SPAN) * 100}%`, width: `${(PREVIEW / SPAN) * 100}%` }} />
-              </div>
-              <div className="wave-meta"><span>starts at 0:{String(start).padStart(2, '0')}</span><span>15 s preview</span></div>
-              <Slider label="Volume" value={volume} onChange={setVolume} format={v => `${v}%`} />
-            </>
-          )}
+          <Slider label="Volume" value={volume} onChange={setVolume} format={v => `${v}%`} />
         </div>
       )}
       <div style={{ height: 96 }} />
 
-      <div className={`now-playing ${sel ? 'on' : ''}`}>
+      <div className={`now-playing ${sel ? 'on' : ''}`} style={{ '--np': coverColor ?? '#F2F2F2' } as CSSProperties}>
         {sel && (
           <>
             <img src={sel.album.cover} alt="" />

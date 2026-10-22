@@ -1,10 +1,14 @@
-const A = '/assets'
+import { asset } from './base'
+
+const A = asset('/assets')
 
 export const STICKERS = [
   'glitter-heart', 'glitter-smiley', 'gem-rainbow', 'glitter-apple', 'gem-flower', 'gem-heart', 'flower-smile', 'pink-stars',
 ].map(n => ({ id: 'st-' + n, src: `${A}/stickers/${n}.webp`, name: n.replace(/-/g, ' ') }))
 
-export const SCRAPS = [
+/** [file, name, note, and 'gif' for the ones that move] */
+export const SCRAPS = ([
+  ['hiss-cat', 'Hissy Cat', 'not in the mood', 'gif'],
   ['bird-blue', 'Cool Bird Alert', 'bird i found on pinterest'],
   ['bird-yellow', 'Skater Budgie', 'kickflip king'],
   ['chick', 'Lil Chick', 'smallest skater in the park'],
@@ -21,12 +25,22 @@ export const SCRAPS = [
   ['grass', 'Grass', 'go outside'],
   ['moodboard', 'Moodboard', 'brainstorm wall'],
   ['brush-stroke', 'Ink Swoosh', 'sumi brush'],
-].map(([n, name, note]) => ({ id: 'sc-' + n, src: `${A}/scraps/${n}.webp`, name, note }))
+] as string[][]).map(([n, name, note, gif]) => ({ id: 'sc-' + n, src: `${A}/scraps/${n}.${gif ? 'gif' : 'webp'}`, name, note, gif: !!gif }))
+
+/** Scraps that used to be stills and are GIFs now: old placements follow along (see the store's init). */
+export const RENAMED_SCRAPS: Record<string, string> = { [`${A}/scraps/hiss-cat.webp`]: `${A}/scraps/hiss-cat.gif` }
 
 export const COVERS: Record<string, string> = Object.fromEntries(
-  ['levels', 'how-zeen', 'montreal', 'yellow-silhouettes', 'forever-young', 'june', 'same-pace', 'svsd', 'svsd-spread']
+  ['levels', 'how-zeen', 'montreal', 'yellow-silhouettes', 'forever-young', 'june', 'svsd', 'svsd-spread',
+    'also-right', 'desired-path', 'rewind-lucid', 'rewind-spread', 'lost-dog']
     .map(n => [n, `${A}/covers/${n}.webp`]),
 )
+
+/** The Zeen wordmark (with its scissors mark and orange dot) and the app icon, from the brand files. */
+export const BRAND = {
+  logo: `${A}/brand/zeen-logo.svg`,
+  icon: `${A}/brand/zeen-icon.svg`,
+}
 
 export const TOOLS = {
   scissors: `${A}/tools/scissors.webp`,
@@ -114,7 +128,7 @@ export function preload(srcs: string[]) { return Promise.all(srcs.map(s => loadI
 
 export const ZINE_FONTS: Record<string, { css: string; label: string }> = {
   typewriter: { css: '"Special Elite", "Courier New", monospace', label: 'Typewriter' },
-  marker: { css: '"Permanent Marker", "Marker Felt", cursive', label: 'Marker' },
+  marker: { css: '"Bricolage Grotesque", "DM Sans", sans-serif', label: 'Bold' },
   grotesk: { css: '"Anton", "Impact", sans-serif', label: 'Grotesk' },
   serif: { css: '"DM Serif Display", Georgia, serif', label: 'Serif' },
   stencil: { css: '"Stardos Stencil", "Impact", sans-serif', label: 'Stencil' },
@@ -125,7 +139,7 @@ export const ZINE_FONTS: Record<string, { css: string; label: string }> = {
 
 export async function loadFonts() {
   if (!('fonts' in document)) return
-  const fams = ['Special Elite', 'Permanent Marker', 'Anton', 'DM Serif Display', 'Stardos Stencil', 'Pinyon Script', 'Rubik Mono One', 'Caveat', 'DM Sans']
+  const fams = ['Special Elite', 'Bricolage Grotesque', 'Anton', 'DM Serif Display', 'Stardos Stencil', 'Pinyon Script', 'Rubik Mono One', 'Caveat', 'DM Sans']
   await Promise.all(fams.map(f => document.fonts.load(`40px "${f}"`).catch(() => null)))
   listeners.forEach(f => f())
 }

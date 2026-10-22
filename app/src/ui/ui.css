@@ -36,10 +36,12 @@
 .check-btn {
   width: 44px; height: 44px;
   border-radius: var(--r-pill);
+  /* --c is the button's colour (CheckBtn's `color`); the glow takes it too */
+  background: var(--c, var(--accent));
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent);
   transition: transform var(--t-fast) var(--ease-spring), filter var(--t-fast);
 }
 .check-btn:active { transform: scale(0.9); filter: brightness(0.92); }
@@ -47,7 +49,7 @@
 .btn {
   height: 44px;
   padding: 0 18px;
-  border-radius: 12px;
+  border-radius: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -61,13 +63,13 @@
 .btn:disabled { opacity: 0.4; pointer-events: none; }
 .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 30%, transparent); }
 .btn-secondary { background: var(--panel); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-1); }
-.btn-dark { background: var(--ink); color: #fff; border-radius: 22px; height: 36px; padding: 0 16px; font-size: 13px; }
+.btn-dark { background: var(--ink); color: #fff; border-radius: 13px; height: 36px; padding: 0 16px; font-size: 13px; }
 .btn-ghost { color: var(--mute); }
 
 .chip {
   height: 30px;
   padding: 0 12px;
-  border-radius: 15px;
+  border-radius: 13px;
   background: var(--chip);
   font-size: 13px;
   color: var(--ink-2);
@@ -82,7 +84,7 @@
   display: grid;
   grid-template-columns: repeat(var(--n), 1fr);
   background: var(--chip);
-  border-radius: 12px;
+  border-radius: 13px;
   padding: 3px;
   height: 38px;
 }
@@ -93,7 +95,7 @@
   width: calc((100% - 6px) / var(--n));
   transform: translateX(calc(100% * var(--i)));
   background: #fff;
-  border-radius: 9px;
+  border-radius: 10px; /* nested inside the 13px track with 3px of padding */
   box-shadow: var(--shadow-1);
   transition: transform var(--t-med) var(--ease-out);
 }
@@ -136,7 +138,7 @@
 .vslider {
   width: 44px;
   background: var(--panel);
-  border-radius: 22px;
+  border-radius: 13px;
   box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
@@ -148,8 +150,14 @@
 .vslider-gradient { height: 176px; padding: 18px 0; }
 .vs-end { width: 44px; height: 30px; display: grid; place-items: center; color: var(--ink-2); }
 .vs-track { position: relative; flex: 1; width: 44px; cursor: ns-resize; }
-.vs-rail { position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1.5px; background: var(--ink-2); transform: translateX(-50%); }
+.vs-rail { position: absolute; left: 50%; top: 14px; bottom: 14px; width: 1.5px; background: var(--ink-2); transform: translateX(-50%); }
 .vslider-gradient .vs-rail { width: 7px; border-radius: 4px; background: linear-gradient(#F2F2F2, #7B7B7B 60%, #2a2a2a); }
+/* the brush size bar is a wedge: a fine point at the bottom swelling to a round top, like the brush itself */
+.vslider-gradient.wedge .vs-rail {
+  width: 18px; border-radius: 9px 9px 2px 2px;
+  background: linear-gradient(#E4E4E4, #7B7B7B 60%, #2a2a2a);
+  clip-path: polygon(0 0, 100% 0, 58% 100%, 42% 100%);
+}
 .vs-knob {
   position: absolute; left: 50%;
   width: 18px; height: 18px; margin: -9px 0 0 -9px;
@@ -162,19 +170,15 @@
 
 .ruler {
   position: relative;
-  height: 30px;
-  overflow: hidden;
+  padding: 8px 0;
   touch-action: none;
   cursor: ew-resize;
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
   transition: opacity var(--t-med);
 }
+.ruler svg { display: block; width: 100%; height: auto; overflow: visible; }
 .ruler.dimmed { opacity: 0.4; }
-.ruler-strip { position: absolute; left: 50%; top: 0; bottom: 0; width: 160%; transition: transform 60ms linear; }
-.ruler .tick { position: absolute; bottom: 8px; width: 1px; height: 10px; background: #8E8E8E; }
-.ruler .tick.kf { height: 15px; background: var(--ink); width: 1.5px; }
-.ruler-center { position: absolute; left: 50%; bottom: 4px; width: 2px; height: 24px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
+/* in the editors the ruler is 240 units wide, centred above the toolbar (Group 82.svg) */
+.bottom-stack .ruler { width: calc(240 * var(--u)); align-self: center; margin: -8px 0; }
 
 /* ---------------------------------------------------------------- sheets */
 
@@ -198,8 +202,13 @@
 .sheet-half { height: 52%; }
 .sheet-tall { height: 78%; }
 .sheet-full { height: calc(100% - var(--safe-top) - 64px); }
-.sheet-grab { flex: none; height: 22px; display: grid; place-items: center; touch-action: none; cursor: grab; }
-.sheet-grab span { width: 36px; height: 4px; border-radius: 2px; background: #DADADA; }
+.sheet-grab, .grabber { flex: none; height: 24px; display: grid; place-items: center; touch-action: none; cursor: grab; }
+/* drag handles are the two bars of "Group 95.svg" in the design file's units (--u): the second bar is the span's shadow */
+.sheet-grab span, .grabber span {
+  width: calc(28.83 * var(--u)); height: calc(1.466 * var(--u)); border-radius: calc(0.733 * var(--u));
+  background: var(--grab, #EFEFEF); box-shadow: 0 calc(3.77 * var(--u)) 0 var(--grab, #EFEFEF);
+  transform: translateY(calc(-1.885 * var(--u)));
+}
 .sheet-head { flex: none; padding: 0 20px 6px; touch-action: none; }
 .sheet-head h3 { margin: 4px 0 6px; font-size: 17px; font-weight: 500; text-align: center; }
 .sheet-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 20px 20px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
@@ -214,7 +223,7 @@
   transform: translate(-50%, -140%);
   background: var(--ink);
   color: #fff;
-  border-radius: 14px;
+  border-radius: 13px;
   padding: 0 6px 0 16px;
   min-height: 44px;
   display: flex;
@@ -231,7 +240,7 @@
 .toast.on { transform: translate(-50%, 0); opacity: 1; }
 .toast.on button { pointer-events: auto; }
 .toast span { padding: 12px 10px 12px 0; overflow: hidden; text-overflow: ellipsis; }
-.toast button { color: var(--lime); font-weight: 600; height: 34px; padding: 0 10px; border-radius: 10px; background: rgba(255,255,255,.08); }
+.toast button { color: var(--accent); font-weight: 600; height: 34px; padding: 0 10px; border-radius: 13px; background: rgba(255,255,255,.08); }
 .toast:not(:has(button)) { padding-right: 16px; }
 
 .avatar { border-radius: 50%; object-fit: cover; background: #eee; flex: none; }
@@ -241,8 +250,11 @@
 
 /* ---------------------------------------------------------------- helpers */
 
-.screen { position: absolute; inset: 0; overflow: hidden; background: var(--canvas); }
-.scroll { overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.screen { position: absolute; inset: 0; overflow: hidden; background-color: var(--canvas); }
+/* a screen with the dot grid takes its zine's background colour (index.css .dots) */
+.screen.dots { background-color: var(--bg, var(--canvas)); }
+/* phone-style scrolling: no visible bar in any browser (standard property here, WebKit's pseudo-element below) */
+.scroll { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .hscroll { display: flex; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .hscroll::-webkit-scrollbar, .scroll::-webkit-scrollbar { display: none; }
 .muted { color: var(--mute); }
@@ -262,9 +274,12 @@
 
 @keyframes pop-in { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes fade-up { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes slap {
-  0% { transform: translate(-50%, -50%) scale(2.4) rotate(-25deg); opacity: 0; }
-  55% { transform: translate(-50%, -50%) scale(0.88) rotate(-8deg); opacity: 1; }
-  75% { transform: translate(-50%, -50%) scale(1.08) rotate(-12deg); }
-  100% { transform: translate(-50%, -50%) scale(1) rotate(-10deg); }
-}
+
+/* Material icons (Icon.tsx): heart and bookmark swap to their filled form when on */
+.icon .i-solid { display: none; }
+.icon.i-filled .i-line, .liked .icon .i-line, .saved .icon .i-line, .on > .icon .i-line { display: none; }
+.icon.i-filled .i-solid, .liked .icon .i-solid, .saved .icon .i-solid, .on > .icon .i-solid { display: inline; }
+
+/* ransom letters (Ransom.tsx): each one cut from a different magazine */
+.rn-ch { display: inline-block; padding: 0 0.06em; margin: 0.03em 0.02em; line-height: 1.05; }
+.rn-sp { display: inline-block; width: 0.35em; }

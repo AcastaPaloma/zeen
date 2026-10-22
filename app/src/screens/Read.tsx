@@ -1,24 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { STICKERS } from '../lib/assets'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { boxCorners, objectAt, objectBox, objectImage } from '../create/collageUtil'
+import { isGifScrap } from '../lib/compose'
 import { haptic, isMuted, setMuted, sfx } from '../lib/feedback'
 import { music } from '../lib/music'
+import { flatToPage } from '../lib/paper'
+import { ME } from '../lib/samples'
 import { published, useApp } from '../lib/store'
 import { renderThumb, useThumb } from '../lib/thumbs'
-import type { ZineDoc } from '../lib/types'
+import type { ScrapItem, ZineDoc, ZObject } from '../lib/types'
 import { FEELS } from '../three/spring'
 import type { ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
-import { Button, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
+import { bgVars, Button, DitherImg, IconBtn, PillGroup, Ruler, Sheet } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
-import { copyLink, HeartSticker, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicChip, type Box } from './Preview'
+import { copyLink, zineScreenBox, offsetBox, shareZine, useZineBox, useZineMusic, flyToShelf, MusicTile, AlbumPopup, type Box } from './Preview'
 import './reading.css'
 
-interface ReaderSticker { src: string; fx: number; fy: number; rot: number }
-
-const stickerKey = (id: string) => `zeen.readerStickers.${id}`
-function loadStickers(id: string): ReaderSticker[] {
-  try { return JSON.parse(localStorage.getItem(stickerKey(id)) ?? '[]') } catch { return [] }
-}
+/** Scrapbook id for an object saved out of a zine, so saving it twice doesn't duplicate it. */
+const savedScrapId = (zine: string, obj: string) => `u_${zine}_${obj}`
 
 /** Small keyframe thumbnail: the zine rendered at that pose. */
 function KfThumb({ doc, i, on, onClick }: { doc: ZineDoc; i: number; on: boolean; onClick: () => void }) {
@@ -31,7 +30,7 @@ function KfThumb({ doc, i, on, onClick }: { doc: ZineDoc; i: number; on: boolean
   }, [doc, i])
   return (
     <button className={`kf-thumb ${on ? 'on' : ''}`} onClick={onClick} aria-label={`Go to ${doc.keyframes[i].name || 'keyframe ' + (i + 1)}`} aria-current={on}>
-      {src ? <img src={src} alt="" /> : <span />}
+      {src ? <DitherImg src={src} size={[64, 44]} /> : <span />}
     </button>
   )
 }
@@ -51,19 +50,18 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   const { go, back, toggleLike, toggleSave, setReadProgress, markSeen, showToast } = useApp.getState()
   const [scene, setScene] = useState<ZineScene | null>(null)
   const [t, setT] = useState(0)
-  const [offFlow, setOffFlow] = useState(false)
   const [page, setPage] = useState<{ n: number; total: number; side: 'front' | 'back' }>({ n: 1, total: 1, side: 'front' })
-  const [slap, setSlap] = useState(0)
   const [mutedS, setMutedS] = useState(isMuted())
   const [endOpen, setEndOpen] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number; fx: number; fy: number } | null>(null)
-  const [stickerPick, setStickerPick] = useState<{ fx: number; fy: number } | null>(null)
-  const [stickers, setStickers] = useState<ReaderSticker[]>(() => loadStickers(id))
+  /** long-press menu; `obj` is the scrap, text or drawing under the finger, if any */
+  const [menu, setMenu] = useState<{ x: number; y: number; obj: ZObject | null } | null>(null)
   const [showHint, setShowHint] = useState(!seenHint)
+  const [album, setAlbum] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const root = useRef<HTMLDivElement>(null)
   const press = useRef<{ x: number; y: number; timer: number } | null>(null)
   const endTimer = useRef(0)
+  const strip = useRef<HTMLDivElement>(null)
   const box = useZineBox(scene)
   const thumb = useThumb(doc)
   useZineMusic(doc, active)
@@ -79,22 +77,62 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     return o
   }, [doc, kfs])
 
-  const goTo = useCallback((k: number, opts: { animate?: boolean } = {}) => {
+  // the ruler glides to a keyframe picked from the strip or the arrows, instead of jumping to it
+  const tNow = useRef(t)
+  tNow.current = t
+  const glide = useRef(0)
+  // the keyframe strip rides along with the ruler (see stripPos below). A glide also eases the strip back from
+  // wherever it was swiped to, so picking a thumbnail scrolls the whole strip until that one's in the middle.
+  const stripGlide = useRef<{ off: number } | null>(null)
+  const stripPos = useCallback((v: number) => {
+    const el = strip.current
+    const n = el?.children.length ?? 0
+    if (!el || !n) return null
+    const i0 = Math.max(0, Math.min(n - 1, Math.floor(v))), i1 = Math.min(n - 1, i0 + 1)
+    const r = el.getBoundingClientRect()
+    const mid = (i: number) => { const b = el.children[i].getBoundingClientRect(); return b.left - r.left + el.scrollLeft + b.width / 2 }
+    // the point between the thumbnails either side of v, so the strip scrolls as smoothly as the ruler
+    const c = mid(i0) + (mid(i1) - mid(i0)) * Math.max(0, Math.min(1, v - i0))
+    return c - el.clientWidth / 2
+  }, [])
+  const glideT = useCallback((to: number) => {
+    cancelAnimationFrame(glide.current)
+    const from = tNow.current, t0 = performance.now()
+    const el = strip.current, p = stripPos(from)
+    const g = (stripGlide.current = { off: el && p !== null ? el.scrollLeft - p : 0 })
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 420), e = 1 - (1 - k) ** 3
+      const v = from + (to - from) * e
+      setT(v)
+      const q = stripPos(v)
+      if (el && q !== null) el.scrollLeft = q + g.off * (1 - e)
+      if (k < 1) glide.current = requestAnimationFrame(step)
+      else stripGlide.current = null
+    }
+    glide.current = requestAnimationFrame(step)
+  }, [stripPos])
+  useEffect(() => () => cancelAnimationFrame(glide.current), [])
+
+  const goTo = useCallback((k: number, opts: { animate?: boolean; glide?: boolean } = {}) => {
     if (!scene || !doc) return
     k = Math.max(0, Math.min(last, Math.round(k)))
-    setT(k)
-    setOffFlow(false)
+    if (opts.glide) glideT(k); else { cancelAnimationFrame(glide.current); stripGlide.current = null; setT(k) }
     scene.setAngles(fullPose(k), { animate: opts.animate !== false, feel, sequential: doc.transition.mode === 'sequential' })
     setReadProgress(id, k)
     clearTimeout(endTimer.current)
     if (k === last && last > 0) endTimer.current = window.setTimeout(() => setEndOpen(true), 900)
     else setEndOpen(false)
-  }, [scene, doc, last, fullPose, feel, id, setReadProgress])
+  }, [scene, doc, last, fullPose, feel, id, setReadProgress, glideT])
 
   const onScene = useCallback((s: ZineScene | null) => {
     setScene(s)
     if (!s || !doc) return
     s.fitMargin = 1.34
+    // drag to move the zine around; turning it over is double-tap only
+    s.dragPan = true
+    s.oneFingerSwipe = false
+    // folds never rest half-open: let go and the page snaps folded or unfolded
+    s.snapFolds = true
     const start = Math.min(useApp.getState().readProgress[id] ?? 0, Math.max(0, doc.keyframes.length - 1))
     const pose: Record<string, number> = {}
     for (const c of doc.creases) pose[c.id] = doc.keyframes[start]?.angles[c.id] ?? c.angle
@@ -104,12 +142,12 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id])
 
-  // leaving the authored path: grabbing a light dims the slider until the reader rejoins
+  // grabbing a light is free play; touching the ruler again poses the zine at the ruler's frame
   useEffect(() => {
     if (!scene) return
     const offs = [
       scene.on('handle-down', () => {
-        setOffFlow(true); setEndOpen(false)
+        setEndOpen(false)
         if (!useApp.getState().seenCoach['read-hint']) { markSeen('read-hint'); setShowHint(false) }
       }),
     ]
@@ -136,31 +174,36 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
 
   useEffect(() => () => clearTimeout(endTimer.current), [])
 
-  const backToFlow = () => {
-    if (!scene || !doc) return
-    const cur = scene.angles()
-    let best = 0, bd = Infinity
-    kfs.forEach((_, k) => {
-      const p = fullPose(k)
-      let d = 0
-      for (const c of doc.creases) d += Math.abs((cur[c.id] ?? 0) - p[c.id])
-      if (d < bd) { bd = d; best = k }
+  // keep the current keyframe's thumbnail in the middle of the strip, over the ruler's playhead
+  // (a glide moves the strip itself, along with easing it back from a swipe)
+  useLayoutEffect(() => {
+    const el = strip.current, p = stripPos(t)
+    if (el && p !== null && !stripGlide.current) el.scrollLeft = p
+  }, [t, stripPos])
+  // thumbnails render in after mount and change width: keep the current one centred as they do
+  useEffect(() => {
+    const el = strip.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const p = stripPos(tNow.current)
+      if (p !== null && !stripGlide.current) el.scrollLeft = p
     })
-    haptic('tap')
-    goTo(best)
-  }
+    for (const c of el.children) ro.observe(c)
+    return () => ro.disconnect()
+  }, [kfs.length, stripPos])
 
   const scrub = (v: number) => {
     if (!scene) return
+    cancelAnimationFrame(glide.current)
+    stripGlide.current = null
     setT(v)
-    if (offFlow) setOffFlow(false)
     setEndOpen(false)
     scene.setAngles(scene.poseAt(v), { feel: { k: 420, c: 42 } })
   }
 
   const like = () => {
     const on = toggleLike(id)
-    if (on) { setSlap(Date.now()); sfx('slap'); haptic('double') } else haptic('tick')
+    if (on) { sfx('pop'); haptic('double') } else haptic('tick')
   }
   const save = () => {
     const on = toggleSave(id)
@@ -172,9 +215,9 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
     setMutedS(m); setMuted(m); music.setMuted(m); haptic('tick')
   }
 
-  useEffect(() => { if (scene) scene.handlers.doubleTap = p => { if (!scene.pick(p.x, p.y)) return false; if (!liked) like(); else { setSlap(Date.now()); sfx('slap') } return true } })
+  useEffect(() => { if (scene) scene.handlers.doubleTap = () => { scene.flip(); haptic('tap'); return true } }, [scene])
 
-  // long-press on the paper: Copy / Add sticker / Save / Share
+  // long-press on the paper: Copy / Save to scrapbook (the thing under the finger) / Save / Share
   const onPointerDown = (e: React.PointerEvent) => {
     if (!scene || (e.target as HTMLElement).closest('.fold-handle')) return
     const r = stage.current!.getBoundingClientRect()
@@ -184,11 +227,13 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       x: e.clientX, y: e.clientY,
       timer: window.setTimeout(() => {
         press.current = null
-        if (!scene.pick(x, y) || !box) return
+        const hit = scene.pick(x, y)
+        if (!hit || !doc) return
         haptic('firm')
-        const w = box.x1 - box.x0, h = box.y1 - box.y0
+        const s = scene.d.surfaces.get(hit.surface)
+        const obj = s ? objectAt(doc, hit.surface, hit.side, flatToPage(s.frame, hit.side, hit.flat), true) : null
         const hr = root.current!.getBoundingClientRect()
-        setMenu({ x: e.clientX - hr.left, y: e.clientY - hr.top, fx: (x - box.x0) / w, fy: (y - box.y0) / h })
+        setMenu({ x: e.clientX - hr.left, y: e.clientY - hr.top, obj })
       }, 520),
     }
   }
@@ -197,25 +242,43 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
   }
   const onPointerUp = () => { if (press.current) { clearTimeout(press.current.timer); press.current = null } }
 
-  const addSticker = (src: string) => {
-    if (!stickerPick) return
-    const next = [...stickers, { src, fx: stickerPick.fx, fy: stickerPick.fy, rot: (Math.random() - 0.5) * 0.6 }]
-    setStickers(next)
-    try { localStorage.setItem(stickerKey(id), JSON.stringify(next)) } catch { /* ignore */ }
-    setStickerPick(null)
-    sfx('slap'); haptic('double')
-    showToast('Stuck on — only you can see it')
+  /** Save the held object into the reader's scrapbook, then fly it toward the profile tab. */
+  const saveObject = (o: ZObject) => {
+    if (!doc || !scene) return
+    if (doc.author !== ME && !doc.publish.scrapReuse) { haptic('tick'); showToast('The maker keeps these scraps to themselves'); return }
+    const sid = savedScrapId(doc.id, o.id)
+    if (useApp.getState().scrapbook.some(x => x.id === sid)) { haptic('tick'); showToast('Already in your scrapbook'); return }
+    const src = objectImage(o, doc.effects)
+    if (!src) { showToast('Nothing to save there'); return }
+    const maker = useApp.getState().users.find(u => u.id === doc.author)
+    const name = o.kind === 'text' ? o.text.split('\n')[0].slice(0, 28) || 'Text' : o.name || (o.kind === 'ink' ? 'Drawing' : 'Scrap')
+    const item: ScrapItem = {
+      id: sid, src, name, note: `saved while reading “${doc.publish.title || 'Untitled'}”`,
+      collection: 'Saved from zines', addedAt: Date.now(), addedBy: ME,
+      from: `"${doc.publish.title || 'Untitled'}"${maker ? ` by ${maker.name}` : ''}`, where: 'Zeen',
+      edition: [1, 1], usedIn: [doc.id], gif: o.kind === 'scrap' && isGifScrap(o), kind: o.kind === 'scrap' && isGifScrap(o) ? 'gif' : 'image',
+    }
+    useApp.getState().addScraps([item])
+    // fly the object itself from where it sits on the page
+    const b = objectBox(o)
+    const panel = scene.panelAt(o.surface, o.side, [b.cx, b.cy])
+    if (panel) {
+      const pts = boxCorners(b).map(p => scene.pageToScreen(panel, o.side, p))
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
+      flyToShelf(src, offsetBox({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, stage.current, root.current), root.current)
+    }
+    sfx('rustle'); haptic('tap')
+    setTimeout(() => showToast('Saved to your scrapbook', { label: 'View', run: () => go({ name: 'scrapbook' }) }), 380)
   }
 
   const more = useMemo(() => (doc ? published(zines).filter(z => z.author === doc.author && z.id !== doc.id).slice(0, 6) : []), [zines, doc])
 
   if (!doc) return <div className="screen dots"><div className="top-bar"><PillGroup className="solo"><IconBtn name="x" label="Close" onClick={back} /></PillGroup></div></div>
 
-  const rejoin = offFlow
   const author = useApp.getState().users.find(u => u.id === doc.author)
 
   return (
-    <div className="screen read dots" ref={root} style={{ '--bg': doc.bg } as CSSProperties}>
+    <div className="screen read dots" ref={root} style={bgVars(doc.bg)}>
       <div className="top-bar">
         <PillGroup className="solo"><IconBtn name="x" label="Close" onClick={back} /></PillGroup>
         <div className="page-ind" aria-live="polite">{page.side === 'back' ? 'Back · ' : ''}Page {page.n} of {page.total}</div>
@@ -225,15 +288,10 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
           <IconBtn name={mutedS ? 'volumeOff' : 'volume'} label={mutedS ? 'Unmute' : 'Mute'} onClick={toggleMute} />
         </PillGroup>
       </div>
-      {doc.music && <div className="read-music"><MusicChip trackId={doc.music.track} compact /></div>}
+      {doc.music && <div className="read-music"><MusicTile trackId={doc.music.track} onOpen={() => setAlbum(true)} /></div>}
 
       <div className="read-stage" ref={stage} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <ZineView doc={doc} mode="page" keepAngles={false} onScene={onScene} />
-        {liked && <HeartSticker box={box} fresh={slap} />}
-        {box && stickers.map((s, i) => (
-          <img key={i} className="reader-sticker" src={s.src} alt="" draggable={false}
-            style={{ left: box.x0 + (box.x1 - box.x0) * s.fx, top: box.y0 + (box.y1 - box.y0) * s.fy, width: Math.max(30, (box.x1 - box.x0) * 0.18), transform: `translate(-50%,-50%) rotate(${s.rot}rad)` }} />
-        ))}
       </div>
 
       {showHint && !seenHint && (
@@ -241,19 +299,16 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
       )}
 
       <div className="read-bottom">
-        <div className="read-caption">{rejoin ? 'free play — the folds are yours' : 'drag the glowing edges to unfold'}</div>
-        {rejoin && (
-          <button className="flow-chip" onClick={backToFlow}><Icon name="rotate" size={15} />Back to flow</button>
-        )}
+        <div className="read-caption">drag the lights to unfold · double-tap to turn over</div>
         {kfs.length > 1 && (
           <>
-            <div className={`kf-strip hscroll ${rejoin ? 'dimmed' : ''}`}>
-              {kfs.map((_, i) => <KfThumb key={i} doc={doc} i={i} on={!rejoin && Math.round(t) === i} onClick={() => { haptic('tick'); goTo(i) }} />)}
+            <div className="kf-strip hscroll" ref={strip}>
+              {kfs.map((_, i) => <KfThumb key={i} doc={doc} i={i} on={Math.round(t) === i} onClick={() => { haptic('tick'); goTo(i, { glide: true }) }} />)}
             </div>
             <div className="ruler-row">
-              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.ceil(t - 0.01) - 1) }} disabled={t <= 0 && !rejoin} aria-label="Previous keyframe"><Icon name="left" size={18} /></button>
-              <Ruler value={t} count={kfs.length} onChange={scrub} onRelease={v => goTo(v)} dimmed={rejoin} />
-              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.floor(t + 0.01) + 1) }} disabled={t >= last && !rejoin} aria-label="Next keyframe"><Icon name="right" size={18} /></button>
+              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.ceil(t - 0.01) - 1, { glide: true }) }} disabled={t <= 0} aria-label="Previous keyframe"><Icon name="left" size={18} /></button>
+              <Ruler value={t} count={kfs.length} onChange={scrub} onRelease={v => goTo(v)} />
+              <button className="step-btn" onClick={() => { haptic('tick'); goTo(Math.floor(t + 0.01) + 1, { glide: true }) }} disabled={t >= last} aria-label="Next keyframe"><Icon name="right" size={18} /></button>
             </div>
           </>
         )}
@@ -265,7 +320,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
           <div className="lp-pos" style={{ left: Math.min(Math.max(menu.x, 140), (root.current?.clientWidth ?? 390) - 140), top: Math.max(menu.y - 64, 90) }}>
           <div className="lp-menu" role="menu">
             <button role="menuitem" onClick={() => { setMenu(null); copyLink(doc) }}>Copy</button>
-            <button role="menuitem" onClick={() => { setStickerPick({ fx: menu.fx, fy: menu.fy }); setMenu(null) }}>Add Sticker</button>
+            {menu.obj && <button role="menuitem" onClick={() => { const o = menu.obj!; setMenu(null); saveObject(o) }}>Save to scrapbook</button>}
             <button role="menuitem" onClick={() => { setMenu(null); if (!saved) save(); else showToast('Already on your shelf') }}>Save</button>
             <button role="menuitem" onClick={() => { setMenu(null); shareZine(doc) }}>Share...</button>
           </div>
@@ -273,11 +328,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
         </>
       )}
 
-      <Sheet open={!!stickerPick} onClose={() => setStickerPick(null)} title="Stick something on it" dim>
-        <div className="sticker-pick">
-          {STICKERS.map(s => <button key={s.id} onClick={() => addSticker(s.src)} aria-label={s.name}><img src={s.src} alt="" /></button>)}
-        </div>
-      </Sheet>
+      <AlbumPopup trackId={doc.music?.track} open={album} onClose={() => setAlbum(false)} />
 
       <Sheet open={endOpen} onClose={() => setEndOpen(false)} className="end-card">
         <div className="end-head">
@@ -288,7 +339,7 @@ export default function Read({ id, active }: { id: string; active: boolean }) {
           <button className={liked ? 'on' : ''} onClick={like}><Icon name="heart" size={22} fill={liked ? 'currentColor' : undefined} /><span>{liked ? 'Liked' : 'Like'}</span></button>
           <button className={saved ? 'on' : ''} onClick={save}><Icon name="bookmark" size={22} fill={saved ? 'currentColor' : undefined} /><span>{saved ? 'Saved' : 'Save'}</span></button>
           <button onClick={() => go({ name: 'create', replyTo: doc.id })}><Icon name="reply" size={22} /><span>Reply zine</span></button>
-          <button onClick={() => goTo(0)}><Icon name="rotate" size={22} /><span>Again</span></button>
+          <button onClick={() => goTo(0)}><Icon name="replay" size={22} /><span>Again</span></button>
         </div>
         {more.length > 0 && (
           <>

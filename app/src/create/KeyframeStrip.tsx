@@ -4,7 +4,7 @@ import { uid } from '../lib/geom'
 import { renderThumb } from '../lib/thumbs'
 import type { ZineDoc } from '../lib/types'
 import { Icon } from '../ui/Icon'
-import { Sheet } from '../ui/kit'
+import { DitherImg, Sheet } from '../ui/kit'
 import { useEditor } from './editor'
 
 /** Geometry-only signature so thumbnails re-render when folds change, not on every collage edit. */
@@ -16,7 +16,7 @@ function sig(doc: ZineDoc, i: number) {
   return h
 }
 
-export function KeyThumb({ doc, i }: { doc: ZineDoc; i: number }) {
+export function KeyThumb({ doc, i, dither }: { doc: ZineDoc; i: number; dither?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
   const key = sig(doc, i)
   useEffect(() => {
@@ -27,11 +27,12 @@ export function KeyThumb({ doc, i }: { doc: ZineDoc; i: number }) {
     return () => { alive = false; clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, i])
-  return url ? <img src={url} alt="" draggable={false} /> : <span className="kt-ph" />
+  if (!url) return <span className="kt-ph" />
+  return dither ? <DitherImg src={url} size={[64, 52]} /> : <img src={url} alt="" draggable={false} />
 }
 
-export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, readOnly }: {
-  doc: ZineDoc; active: number; onPick: (i: number) => void; onAdd?: () => void; onPlay?: () => void; playing?: boolean; readOnly?: boolean
+export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, readOnly, dither }: {
+  doc: ZineDoc; active: number; onPick: (i: number) => void; onAdd?: () => void; onPlay?: () => void; playing?: boolean; readOnly?: boolean; dither?: boolean
 }) {
   const ed = useEditor()
   const [menu, setMenu] = useState<number | null>(null)
@@ -39,9 +40,12 @@ export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, rea
   const press = useRef<number>(0)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    // keep the active pose centred
-    const el = ref.current?.querySelector(`[data-i="${active}"]`) as HTMLElement | null
-    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    // keep the active pose centred (scrolling only the strip: scrollIntoView would drag the screen along too)
+    const strip = ref.current
+    const el = strip?.querySelector<HTMLElement>(`[data-i="${active}"]`)
+    if (!strip || !el) return
+    const s = strip.getBoundingClientRect(), b = el.getBoundingClientRect()
+    strip.scrollTo({ left: strip.scrollLeft + (b.left + b.width / 2) - (s.left + s.width / 2), behavior: 'smooth' })
   }, [active])
   const kfs = doc.keyframes
   const mutate = (fn: (k: ZineDoc['keyframes']) => ZineDoc['keyframes'], label: string) => ed.commit({ ...doc, keyframes: fn(kfs.slice()) }, label)
@@ -59,13 +63,13 @@ export function KeyframeStrip({ doc, active, onPick, onAdd, onPlay, playing, rea
             onPointerDown={() => { if (readOnly) return; press.current = window.setTimeout(() => { haptic('firm'); setName(k.name); setMenu(i) }, 480) }}
             onPointerUp={() => clearTimeout(press.current)} onPointerLeave={() => clearTimeout(press.current)}
             onClick={() => { haptic('tick'); onPick(i) }}>
-            <KeyThumb doc={doc} i={i} />
+            <KeyThumb doc={doc} i={i} dither={dither} />
             <span className="kfi-n">{i === 0 ? 'cover' : i + 1}</span>
           </button>
         ))}
         {onAdd && (
           <button className="kfi kfi-add" onClick={onAdd} aria-label="Add keyframe from the current pose">
-            <Icon name="pages" size={20} />
+            <Icon name="nextPose" size={20} />
             <span>next pose</span>
           </button>
         )}

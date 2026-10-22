@@ -3,15 +3,18 @@
 .search-field {
   display: flex; align-items: center; gap: 8px;
   height: 42px; padding: 0 12px;
-  border-radius: 12px;
+  border-radius: 13px;
   border: 1px solid #DCDCDC;
   background: #fff;
   color: var(--mute);
   flex: 1;
+  /* Safari won't shrink a field below its input's built-in width unless told it may */
+  min-width: 0;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
 .search-field:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04); }
-.search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 15px; color: var(--ink); }
+.search-field input { flex: 1; width: 100%; min-width: 0; border: 0; outline: 0; background: none; font-size: 16px; color: var(--ink); }
+/* (16px: anything smaller and iPhones zoom the whole page in when the field is tapped) */
 .search-field input::placeholder { color: #A3A3A3; }
 .search-field button { width: 28px; height: 28px; display: grid; place-items: center; color: var(--mute); }
 
@@ -25,7 +28,7 @@
 .coll-row { gap: 12px; margin: 14px -20px 0; padding: 0 20px 2px; }
 .coll { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--ink); transition: transform var(--t-fast) var(--ease-spring); }
 .coll:active { transform: scale(0.93); }
-.coll-img { width: 76px; height: 76px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: #F6F6F6; transition: box-shadow var(--t-fast); }
+.coll-img { width: 76px; height: 76px; border-radius: 13px; overflow: hidden; display: grid; place-items: center; background: #F6F6F6; transition: box-shadow var(--t-fast); }
 .coll-img img { width: 100%; height: 100%; object-fit: cover; }
 .coll-img.icon { background: #F3F3F3; color: var(--ink-2); }
 .coll.on .coll-img { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
@@ -122,8 +125,16 @@
 /* ---------------------------------------------------------------- music */
 
 .music-sheet .sheet-body { position: relative; }
-.music-search { display: flex; gap: 8px; align-items: center; position: sticky; top: 0; z-index: 3; background: #fff; padding: 2px 0 8px; }
-.music-search .chip { height: 42px; border-radius: 12px; }
+.music-search {
+  display: flex; gap: 8px; align-items: center;
+  /* the full width of the sheet and over its top padding (stuck, a sticky box stops at the padding: hence -4px),
+     so no cover peeks round it as the pile scrolls under */
+  position: sticky; top: -4px; z-index: 3;
+  margin: -4px -20px 0; padding: 6px 20px 10px;
+  background: #fff;
+}
+.music-search::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(#fff, rgba(255, 255, 255, 0)); pointer-events: none; }
+.music-search .chip { flex: none; height: 42px; padding: 0 14px; border-radius: 13px; white-space: nowrap; }
 .record-pile { position: relative; margin: 6px -6px 0; transition: height var(--t-med); }
 .record {
   position: absolute;
@@ -136,10 +147,16 @@
 .record-cap { margin-top: 6px; font-size: 12px; color: var(--ink-2); text-align: center; line-height: 1.2; }
 .record-cap small { color: var(--mute); font-size: 11px; }
 .record:active { transform: rotate(var(--rot)) scale(0.96); }
-.record-pile.has-sel .record:not(.on) { filter: blur(6px) saturate(0.6); opacity: 0.55; }
-.record.on { transform: rotate(calc(var(--rot) * 0.4)) scale(1.06) translateY(-6px); z-index: 2; }
-.record.on img { box-shadow: 0 16px 30px rgba(0, 0, 0, 0.28); }
-.record.on .record-cap { color: var(--accent); }
+.record img, .record-cap { transition: filter 280ms ease, opacity 280ms ease, box-shadow 280ms ease; }
+/* previewing a song: the pile straightens, everything else blurs, takes the dither and fades back */
+.record-pile.has-sel .record { transform: none; }
+.record-pile.has-sel .record-cap { transform: none !important; }
+.record-pile.has-sel .record:not(.on) img { filter: blur(7px) url(#zeen-dither); opacity: 0.4; box-shadow: none; }
+.record-pile.has-sel .record:not(.on) .record-cap { filter: blur(2px); opacity: 0.3; }
+.record.on { transform: scale(1.04); z-index: 2; }
+.record.on img { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16); }
+.record.on .record-cap, .record.on .record-cap small { color: var(--accent); }
+.record.on .record-cap small { opacity: 0.85; }
 
 .tracklist {
   position: sticky; bottom: 84px; z-index: 3;
@@ -147,51 +164,39 @@
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-radius: 18px;
+  border-radius: 13px;
   box-shadow: var(--shadow-2);
-  padding: 12px 14px 8px;
+  padding: 4px 14px 6px;
   animation: fade-up 280ms var(--ease-out) both;
 }
-.tl-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
-.tl-head b { font-weight: 600; font-size: 14px; }
-.tl-head small { color: var(--mute); font-size: 12px; }
-.tl-row { width: 100%; display: flex; align-items: center; gap: 10px; height: 46px; text-align: left; border-radius: 10px; padding: 0 4px; transition: background var(--t-fast); }
-.tl-row img, .tl-row .dither-img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; flex: none; }
-.tl-row span:not(.eq) { flex: 1; font-size: 14px; color: #A0A0A0; transition: color var(--t-fast); }
-.tl-row small { color: var(--mute-2); font-size: 11px; }
-.tl-row.on { background: #FFF2F0; }
-.tl-row.on span:not(.eq) { color: var(--ink); font-weight: 500; }
-.eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
-.eq i { width: 3px; background: var(--accent); border-radius: 1px; animation: eq 700ms ease-in-out infinite; }
-.eq i:nth-child(2) { animation-delay: -200ms; }
-.eq i:nth-child(3) { animation-delay: -400ms; }
-@keyframes eq { 0%, 100% { height: 4px; } 50% { height: 14px; } }
 
-.wave { position: relative; display: flex; align-items: center; gap: 2px; height: 46px; margin: 10px 0 2px; touch-action: none; cursor: ew-resize; }
+.wave { position: relative; display: flex; align-items: center; gap: 2px; height: 46px; margin: 10px 0 8px; touch-action: none; cursor: ew-resize; }
 .wave > span:not(.wave-win) { flex: 1; background: #D6D6D6; border-radius: 2px; min-height: 3px; transition: background var(--t-fast); }
 .wave > span.in { background: var(--accent); }
-.wave-win { position: absolute; top: -3px; bottom: -3px; border-radius: 8px; box-shadow: inset 0 0 0 2px var(--ink); pointer-events: none; transition: left 80ms linear; }
-.wave-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--mute); margin-bottom: 2px; }
+.wave-win { position: absolute; top: -3px; bottom: -3px; border-radius: 8px; box-shadow: inset 0 0 0 2px var(--mute-2); pointer-events: none; transition: left 80ms linear; will-change: transform; }
+/* held, it follows the finger exactly (its squash and stretch is set from MusicPicker's useJelly) */
+.wave.dragging .wave-win { transition: none; box-shadow: inset 0 0 0 2.5px var(--mute-2), 0 2px 8px rgba(0, 0, 0, 0.08); }
 
 .now-playing {
   position: sticky; bottom: 0; z-index: 4;
   display: flex; align-items: center; gap: 10px;
   height: 66px; padding: 0 10px;
   margin-top: -66px;
-  border-radius: 18px;
-  background: linear-gradient(90deg, #fff 55%, #FFFBD9);
+  border-radius: 13px;
+  /* fades into the dominant colour of the song's cover (MusicPicker sets --np) */
+  background: linear-gradient(90deg, #fff 45%, color-mix(in srgb, var(--np, #F2F2F2) 26%, #fff));
+  transition: transform 340ms var(--ease-spring), background 300ms ease;
   box-shadow: var(--shadow-2);
   transform: translateY(130%);
-  transition: transform 340ms var(--ease-spring);
 }
 .now-playing.on { transform: none; }
 .now-playing img { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; }
 .np-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .np-text b { font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .np-text small { color: var(--mute); font-size: 13px; }
-.now-playing button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--ink); border-radius: 12px; transition: transform var(--t-fast) var(--ease-spring); }
+.now-playing button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--ink); border-radius: 13px; transition: transform var(--t-fast) var(--ease-spring); }
 .now-playing button:active { transform: scale(0.88); }
-.np-go { background: var(--ink); color: #fff !important; }
+.np-go { color: var(--ink); }
 
 /* ---------------------------------------------------------------- effects */
 
@@ -199,7 +204,7 @@
 .fx-strip { gap: 10px; margin: 0 -20px; padding: 4px 20px 8px; }
 .fx-tile { flex: none; width: 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--mute); transition: transform var(--t-fast) var(--ease-spring), color var(--t-fast); }
 .fx-tile:active { transform: scale(0.93); }
-.fx-img { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; background: #EEE; transition: box-shadow var(--t-fast); }
+.fx-img { position: relative; width: 84px; height: 84px; border-radius: 13px; overflow: hidden; background: #EEE; transition: box-shadow var(--t-fast); }
 .fx-img img { width: 100%; height: 100%; object-fit: cover; display: block; animation: fade-in 260ms ease both; }
 .fx-ph { position: absolute; inset: 0; background: linear-gradient(110deg, #EEE 30%, #F7F7F7 50%, #EEE 70%); background-size: 200% 100%; animation: shimmer 1s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
@@ -244,14 +249,14 @@ canvas.layer-thumb { image-rendering: auto; }
 
 /* ---------------------------------------------------------------- text editor */
 
-.text-editor {
-  position: absolute; inset: 0; z-index: 80;
-  background: rgba(18, 18, 18, 0);
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
-  transition: background 260ms ease, backdrop-filter 260ms ease, -webkit-backdrop-filter 260ms ease;
-}
-.text-editor.on { background: rgba(18, 18, 18, 0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.text-editor { position: absolute; inset: 0; z-index: 80; }
+/* While writing, only the zine in progress steps back: blurred, faded and dithered like the backdrops behind the
+   other pop-ups. The dotted page stays exactly as it is, and the collage's own controls make way. */
+.create .zscene-canvas { transition: opacity 260ms ease; }
+.create:has(.text-editor) .zscene-canvas { filter: blur(6px) url(#zeen-dither); opacity: 0.45; }
+.create:has(.text-editor) .zscene > :not(.zscene-canvas),
+.collage:has(> .text-editor) > :not(.text-editor) { animation: te-make-way 180ms ease both; pointer-events: none; }
+@keyframes te-make-way { to { opacity: 0; visibility: hidden; } }
 .text-editor .top-bar { opacity: 0; transform: translateY(-8px); transition: opacity 220ms ease, transform 300ms var(--ease-out); }
 .text-editor.on .top-bar { opacity: 1; transform: none; }
 .te-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 90px 20px 0; }
@@ -276,29 +281,31 @@ canvas.layer-thumb { image-rendering: auto; }
   background: transparent;
   color: transparent;
 }
-.te-preview .te-ph { opacity: 0.55; }
+/* the placeholder is a quiet grey whatever the colour, so it reads on the light page */
+.te-preview .te-ph { color: var(--mute); opacity: 0.85; -webkit-text-stroke: 0; }
 .te-preview.style-box .te-ph span { background: none; }
 .te-line span { padding: 0 0.12em; border-radius: 0.18em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .te-preview.style-box .te-line span { background: var(--box); }
 .te-preview.style-outline { -webkit-text-stroke: 0.14em var(--stroke); paint-order: stroke fill; }
 .te-preview.style-plain { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.15); }
-.rn-ch { display: inline-block; padding: 0 0.06em; margin: 0.03em 0.02em; line-height: 1.05; }
-.rn-sp { display: inline-block; width: 0.35em; }
+/* white or near-white ink gets a soft edge so it still shows against the page */
+.te-preview.style-plain.pale { text-shadow: 0 0 1px rgba(0, 0, 0, 0.45), 0 1px 10px rgba(0, 0, 0, 0.25); }
 
 .te-tools { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px; padding: 0 14px; transition: bottom 200ms var(--ease-out); }
 .te-fonts, .te-colors { gap: 8px; margin: 0 -14px; padding: 6px 14px 4px; }
 .te-font {
-  flex: none; min-width: 64px; height: 56px; border-radius: 12px; padding: 0 10px;
+  flex: none; min-width: 64px; height: 56px; border-radius: 13px; padding: 0 10px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-  background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 19px;
+  background: var(--panel); color: var(--ink); font-size: 19px; box-shadow: var(--shadow-1);
   transition: background var(--t-fast), transform var(--t-fast) var(--ease-spring), color var(--t-fast);
 }
-.te-font small { font-family: var(--ui); font-size: 9px; opacity: 0.75; }
-.te-font.on { background: #fff; color: var(--ink); transform: scale(1.05); }
+.te-font small { font-family: var(--ui); font-size: 9px; color: var(--mute); }
+.te-font.on { background: var(--ink); color: #fff; transform: scale(1.05); }
+.te-font.on small { color: rgba(255, 255, 255, 0.75); }
 .te-font:active { transform: scale(0.92); }
 .te-ransom-chip { font-size: 15px; }
 .te-ransom-chip .rn-ch { margin: 0; }
-.te-sw { flex: none; width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); transition: transform var(--t-fast) var(--ease-spring); }
+.te-sw { flex: none; width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.18); transition: transform var(--t-fast) var(--ease-spring); }
 .te-sw.on { transform: scale(1.18); box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0, 0, 0, 0.3); }
 .te-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .te-pill .icon-btn { min-width: 52px; }

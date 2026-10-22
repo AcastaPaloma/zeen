@@ -1,4 +1,5 @@
 import { getImage, PAPER, ZINE_FONTS } from './assets'
+import { gifFrame, isGifSrc } from './gif'
 import { applyEffects, cutout } from './effects'
 import { noise1, rng } from './geom'
 import { flatToPage } from './paper'
@@ -82,17 +83,27 @@ function paintPaper(ctx: CanvasRenderingContext2D, W: number, H: number, s: Surf
 // ---------------------------------------------------------------- scraps
 
 const scrapCache = new Map<string, { canvas: HTMLCanvasElement; pad: number }>()
+// a short id per image source: imported scraps are data URLs megabytes long, too big to build keys from every frame
+const srcIds = new Map<string, number>()
+const srcId = (src: string) => { let i = srcIds.get(src); if (i === undefined) srcIds.set(src, (i = srcIds.size)); return i }
 
 function scrapKey(o: ScrapObj, effects: Effect[]) {
   const fx = effects.filter(e => e.scope === 'scrap' && e.target === o.id).map(e => e.type + e.amount.toFixed(2)).join(',')
-  return `${o.src}|${o.sticker.toFixed(2)}|${o.cutout ? 1 : 0}|${fx}`
+  return `${srcId(o.src)}|${o.sticker.toFixed(2)}|${o.cutout ? 1 : 0}|${fx}`
 }
 
-export function processedScrap(o: ScrapObj, effects: Effect[] = []) {
-  const key = scrapKey(o, effects)
+/** A scrap that plays: flagged as a GIF when it was added, or a GIF by its source. */
+export const isGifScrap = (o: ScrapObj) => !!o.gif || isGifSrc(o.src)
+
+/**
+ * A scrap ready to draw: cut out, with its effects and its die-cut sticker border. A GIF passes the frame
+ * that's due, and each frame is made (and kept) the same way, so a GIF sticker looks like any other sticker.
+ */
+export function processedScrap(o: ScrapObj, effects: Effect[] = [], frame?: { img: HTMLCanvasElement; i: number }) {
+  const key = scrapKey(o, effects) + (frame ? `#${frame.i}` : '')
   const hit = scrapCache.get(key)
   if (hit) return hit
-  const img = getImage(o.src)
+  const img = frame?.img ?? getImage(o.src)
   if (!img) return null
   const max = 900
   const s = Math.min(1, max / Math.max(img.width, img.height))
@@ -138,20 +149,9 @@ function drawScrap(ctx: CanvasRenderingContext2D, o: ScrapObj, k: number, opts: 
   ctx.rotate(rot)
   ctx.scale(o.scale * (o.flipX ? -1 : 1), o.scale)
   const w = o.w, h = o.h
-  if (o.gif && opts.animate) {
-    const img = getImage(o.src)
-    if (!img) return
-    if (o.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 0.35 * k; ctx.shadowOffsetY = 0.12 * k }
-    if (o.sticker > 0) {
-      ctx.fillStyle = '#fff'
-      roundRect(ctx, -w / 2 - o.sticker, -h / 2 - o.sticker, w + o.sticker * 2, h + o.sticker * 2, o.sticker * 1.5)
-      ctx.fill()
-      ctx.shadowColor = 'transparent'
-    }
-    ctx.drawImage(img, -w / 2, -h / 2, w, h)
-    return
-  }
-  const p = processedScrap(o, opts.effects)
+  // a GIF draws the frame that's due (lib/gif.ts); the still first frame until it has decoded, and in thumbnails
+  const frame = opts.animate && isGifScrap(o) ? gifFrame(o.src, opts.time * 1000) : null
+  const p = processedScrap(o, opts.effects, frame ?? undefined)
   if (!p) return
   const pw = w * (p.canvas.width / (p.canvas.width - p.pad * 2))
   const ph = h * (p.canvas.height / (p.canvas.height - p.pad * 2))
@@ -186,7 +186,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // ---------------------------------------------------------------- text
 
-const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Permanent Marker"', '"Stardos Stencil"', '"Rubik Mono One"']
+const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Bricolage Grotesque"', '"Stardos Stencil"', '"Rubik Mono One"']
 const RANSOM_BG = ['#FFFFFF', '#F8D647', '#111111', '#FF4934', '#C0F6FF', '#FFD5F4', '#EBEFD7', '#245AE2']
 
 const measureCtx = scratch.getContext('2d')!
@@ -418,6 +418,6 @@ export function strokePoints(s: Stroke, opts: { time: number; animate: boolean; 
 
 export function objectHasMotion(o: ZObject) {
   if (o.kind === 'ink') return o.strokes.some(s => s.boil.on)
-  if (o.kind === 'scrap') return !!o.gif
+  if (o.kind === 'scrap') return isGifScrap(o)
   return false
 }

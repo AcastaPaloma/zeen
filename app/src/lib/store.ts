@@ -1,10 +1,13 @@
 import { del, entries, get, set } from 'idb-keyval'
 import { create } from 'zustand'
+import { RENAMED_SCRAPS } from './assets'
 import { uid } from './geom'
 import { COMMUNITIES, ME, SAMPLE_COMMENTS, SAMPLE_POSTS, sampleScrapbook, sampleZines, USERS } from './samples'
 import type { Comment, Community, Post, ScrapItem, User, ZineDoc } from './types'
 
 // ---------------------------------------------------------------- navigation
+
+export type HomePage = 'discover' | 'following' | 'profile'
 
 export type Route =
   | { name: 'home'; tab?: 'discover' | 'following' }
@@ -21,6 +24,13 @@ export type Route =
 export type CreateStep = 'cut' | 'collage' | 'finalize' | 'publish'
 
 export interface Shelf { id: string; name: string; zines: string[] }
+
+export interface PublishLanding {
+  id: string
+  title: string
+  cover: string | null
+  from: { x: number; y: number; width: number; height: number }
+}
 
 interface Persisted {
   likes: string[]
@@ -49,12 +59,20 @@ interface AppState extends Persisted {
   communities: Community[]
   scrapbook: ScrapItem[]
   toast: { id: number; text: string; action?: { label: string; run: () => void } } | null
+  publishLanding: PublishLanding | null
   searchOpen: boolean
+  /** where the home search field sits (client px, its top edge): the search sheet's field grows out of it */
+  searchFrom: number | null
+  /** home is a row of pages you swipe between: the two feeds, then your own profile */
+  homePage: HomePage
+  /** the feed home returns to from the profile tab */
+  homeFeed: 'discover' | 'following'
   init(): Promise<void>
   go(r: Route): void
   replace(r: Route): void
   back(): void
   tab(name: 'home' | 'create' | 'profile'): void
+  setHomePage(p: HomePage): void
   showToast(text: string, action?: { label: string; run: () => void }, ms?: number): void
   saveZine(z: ZineDoc): void
   deleteZine(id: string): void
@@ -72,7 +90,8 @@ interface AppState extends Persisted {
   setReadProgress(id: string, kf: number): void
   updateMe(p: Partial<User>): void
   addScraps(items: ScrapItem[]): void
-  setSearchOpen(o: boolean): void
+  /** `from`: the client y the sheet grows out of / folds back into; null to just slide (leave it out to keep it) */
+  setSearchOpen(o: boolean, from?: number | null): void
   addRecentSearch(q: string): void
   markSeen(key: string): void
   setSeenIntro(): void
@@ -80,16 +99,20 @@ interface AppState extends Persisted {
   markDownloaded(id: string): void
 }
 
-const LS_KEY = 'zeen.state.v1'
+/** Point scraps placed before an asset became a GIF at the GIF, so they play too. */
+function withRenamedScraps(z: ZineDoc): ZineDoc {
+  if (!z.objects.some(o => o.kind === 'scrap' && RENAMED_SCRAPS[o.src])) return z
+  return { ...z, objects: z.objects.map(o => (o.kind === 'scrap' && RENAMED_SCRAPS[o.src] ? { ...o, src: RENAMED_SCRAPS[o.src], gif: true } : o)) }
+}
+
+// v2: everyone starts from a blank account (nothing made, saved or pinned yet)
+const LS_KEY = 'zeen.state.v2'
 const IDB_ZINES = 'zeen.zine.'
 const IDB_SCRAPS = 'zeen.scraps.v1'
 
 const defaults = (): Persisted => ({
-  likes: [], saves: ['z_levels', 'z_june', 'z_mtl', 'z_pace'],
-  shelves: [
-    { id: 'sh_all', name: 'Favourites', zines: ['z_levels', 'z_june'] },
-    { id: 'sh_ref', name: 'Design reference', zines: ['z_mtl', 'z_pace'] },
-  ],
+  likes: [], saves: [],
+  shelves: [{ id: 'sh_all', name: 'Favourites', zines: [] }],
   following: ['u_raf', 'u_naheel', 'u_ada'],
   joined: ['c_svsd', 'c_small'],
   me: USERS[0],
@@ -99,7 +122,7 @@ const defaults = (): Persisted => ({
   seenIntro: false,
   seenCoach: {},
   recentSearches: ['halftone', 'small guys', 'riot grrrl'],
-  pinned: ['z_howzeen'],
+  pinned: [],
   downloads: [],
   stickersOnZines: {},
 })
@@ -143,14 +166,18 @@ export const useApp = create<AppState>((setS, getS) => ({
   communities: COMMUNITIES,
   scrapbook: [],
   toast: null,
+  publishLanding: null,
   searchOpen: false,
+  searchFrom: null,
+  homePage: 'discover',
+  homeFeed: 'discover',
 
   async init() {
     const samples = sampleZines()
     const zines: Record<string, ZineDoc> = {}
     for (const z of samples) zines[z.id] = z
     try {
-      for (const [k, v] of await entries()) if (String(k).startsWith(IDB_ZINES)) zines[(v as ZineDoc).id] = v as ZineDoc
+      for (const [k, v] of await entries()) if (String(k).startsWith(IDB_ZINES)) { const z = withRenamedScraps(v as ZineDoc); zines[z.id] = z }
     } catch { /* idb blocked */ }
     let scraps = sampleScrapbook()
     try {
@@ -167,11 +194,14 @@ export const useApp = create<AppState>((setS, getS) => ({
   back() { setS(s => (s.stack.length > 1 ? { stack: s.stack.slice(0, -1), dir: -1 } : s)) },
   tab(name) {
     setS(s => {
-      if (name === 'home') return { stack: [{ name: 'home' }], dir: -1 }
-      if (name === 'profile') return { stack: [{ name: 'home' }, { name: 'profile' }], dir: 1 }
+      // both tabs are pages of home: switching them only moves home's pager (and closes whatever is on top)
+      if (name === 'home') return { stack: [{ name: 'home' }], dir: -1, homePage: 'discover', homeFeed: 'discover' }
+      if (name === 'profile') return { stack: [{ name: 'home' }], dir: -1, homePage: 'profile' }
       return { stack: [...s.stack, { name: 'create' }], dir: 1 }
     })
   },
+
+  setHomePage(p) { setS(s => ({ homePage: p, homeFeed: p === 'profile' ? s.homeFeed : p })) },
 
   showToast(text, action, ms = 2600) {
     const id = Date.now()
@@ -269,7 +299,7 @@ export const useApp = create<AppState>((setS, getS) => ({
       await set(IDB_SCRAPS, mine)
     } catch { /* ignore */ }
   },
-  setSearchOpen(o) { setS({ searchOpen: o }) },
+  setSearchOpen(o, from) { setS(s => ({ searchOpen: o, searchFrom: from === undefined ? s.searchFrom : from })) },
   addRecentSearch(q) {
     if (!q.trim()) return
     setS(s => ({ recentSearches: [q, ...s.recentSearches.filter(x => x !== q)].slice(0, 8) }))

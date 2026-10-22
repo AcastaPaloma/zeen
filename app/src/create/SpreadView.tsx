@@ -8,11 +8,23 @@ import { IconBtn, PillGroup } from '../ui/kit'
 import { objectAt, transformObject } from './collageUtil'
 import { useEditor } from './editor'
 
-/** The whole zine unfolded flat, front and back, with page numbers. Scraps and text can be moved here. */
+/**
+ * Every page of the zine laid out flat: each piece of paper (the sheet and any leaves bound into it), front
+ * and back, in page order and all at one scale, with page numbers. Scraps and text can be moved here.
+ */
 export function SpreadView({ scene, doc, onClose, onJump, onMove }: {
   scene: ZineScene; doc: ZineDoc; onClose: () => void; onJump: (panel: string, side: Side) => void; onMove: (objects: ZObject[], label: string) => void
 }) {
   const surfaces = doc.surfaces.filter(s => scene.d.surfaces.has(s.id))
+  // the page numbers on each side of each piece, to order and label them by
+  const sides = surfaces.flatMap(s => (['front', 'back'] as Side[]).map(side => {
+    const pages = scene.d.list.filter(P => P.surface === s.id && P.region.length).map(P => scene.pageOf(P.id, side)).filter(n => n > 0).sort((a, b) => a - b)
+    return { s, side, pages }
+  })).sort((a, b) => (a.pages[0] ?? Infinity) - (b.pages[0] ?? Infinity))
+  // leaves are numbered in the order their pages come, not the order they were added
+  const leaves = [...new Set(sides.filter(x => x.s.kind === 'leaf').map(x => x.s))]
+  const nameOf = (s: Surface) => (s.kind === 'leaf' ? `Leaf ${leaves.indexOf(s) + 1}` : 'Sheet')
+  const widest = Math.max(...surfaces.map(s => s.frame.w))
   return (
     <div className="spread-view" role="dialog" aria-label="Spread view">
       <div className="top-bar">
@@ -21,30 +33,34 @@ export function SpreadView({ scene, doc, onClose, onJump, onMove }: {
         <span style={{ width: 44 }} />
       </div>
       <div className="sv-scroll scroll">
-        {surfaces.map(s => (['front', 'back'] as Side[]).map(side => (
-          <SpreadSide key={`${s.id}:${side}`} scene={scene} doc={doc} surface={s} side={side} onJump={onJump} onMove={onMove} />
-        )))}
+        {sides.map(({ s, side, pages }) => (
+          <SpreadSide key={`${s.id}:${side}`} scene={scene} doc={doc} surface={s} side={side} widest={widest}
+            label={`${nameOf(s)} · ${side === 'front' ? 'Front' : 'Back'}`} pages={pages} onJump={onJump} onMove={onMove} />
+        ))}
         <p className="sheet-tip" style={{ textAlign: 'center' }}>Tap a page to jump in. Drag scraps and text to line them up across creases.</p>
       </div>
     </div>
   )
 }
 
-function SpreadSide({ scene, doc, surface, side, onJump, onMove }: {
-  scene: ZineScene; doc: ZineDoc; surface: Surface; side: Side; onJump: (panel: string, side: Side) => void; onMove: (objects: ZObject[], label: string) => void
+function SpreadSide({ scene, doc, surface, side, widest, label, pages, onJump, onMove }: {
+  scene: ZineScene; doc: ZineDoc; surface: Surface; side: Side; widest: number; label: string; pages: number[]
+  onJump: (panel: string, side: Side) => void; onMove: (objects: ZObject[], label: string) => void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const [w, setW] = useState(340)
+  const [room, setRoom] = useState(340)
   const drag = useRef<{ id: string; base: ZObject; start: Vec2; moved: boolean } | null>(null)
   const docRef = useRef(doc)
   docRef.current = doc
   const f = surface.frame
-  const scale = w / f.w
+  // one scale for every piece, set by the widest, so a leaf shows at its true size beside the sheet
+  const scale = room / widest
+  const w = f.w * scale
   const h = f.h * scale
 
   useEffect(() => {
     const el = ref.current?.parentElement
-    if (el) setW(Math.min(el.clientWidth, 520))
+    if (el) setRoom(Math.min(el.clientWidth, 520))
   }, [])
 
   useEffect(() => {
@@ -84,19 +100,21 @@ function SpreadSide({ scene, doc, surface, side, onJump, onMove }: {
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke()
       }
       ctx.setLineDash([])
-      // page numbers
+      // page numbers, drawn in screen pixels so they stay crisp; each digit is centred on its own ink
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.font = '600 11px "DM Sans", sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'
       for (const P of scene.d.list) {
         if (P.surface !== surface.id || !P.region.length) continue
         const n = scene.pageOf(P.id, side)
         if (!n) continue
         const c0 = flatToPage(f, side, centroid(P.region))
-        const r = 0.55
+        const x = c0[0] * scale, y = c0[1] * scale
         ctx.fillStyle = 'rgba(26,26,26,0.82)'
-        ctx.beginPath(); ctx.arc(c0[0], c0[1], r, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill()
+        const m = ctx.measureText(String(n))
         ctx.fillStyle = '#fff'
-        ctx.font = `600 ${0.55}px DM Sans, sans-serif`
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-        ctx.fillText(String(n), c0[0], c0[1] + 0.02)
+        ctx.fillText(String(n), x, y + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2)
       }
     }
     draw()
@@ -110,7 +128,7 @@ function SpreadSide({ scene, doc, surface, side, onJump, onMove }: {
 
   return (
     <div className="sv-side">
-      <div className="sv-label">{surface.kind === 'leaf' ? 'Added page' : 'Sheet'} · {side === 'front' ? 'Front' : 'Back'}</div>
+      <div className="sv-label" style={{ width: w }}>{label}{pages.length > 0 && <span className="sv-pages">{pages.length > 1 ? 'pages' : 'page'} {pages.join(', ')}</span>}</div>
       <canvas ref={ref} style={{ width: w, height: h, touchAction: 'none' }}
         onPointerDown={e => {
           ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)

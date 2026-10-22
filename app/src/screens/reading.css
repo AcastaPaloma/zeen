@@ -1,29 +1,50 @@
 /* each reading screen is its own stacking context so a screen underneath never paints over the top one */
 .screen.home, .screen.preview, .screen.read { isolation: isolate; z-index: 0; }
 
-/* Preview backdrop: the feed behind blurs + darkens (animated layers can't use backdrop-filter) */
-.device > .layer { transition: filter 300ms ease; }
-.device > .layer.under:has(~ .layer.top .screen.preview) { filter: blur(14px) brightness(0.72) saturate(1.2); }
+/* Preview backdrop, like a song preview in the music picker: the feed behind darkens a touch, and only
+   its zine covers blur, take the colour dither (lib/dither.ts) and fade. The page itself stays clean. */
+.device > .layer.under:has(~ .layer.top .screen.preview) { filter: brightness(0.96); }
+.device > .layer.under:has(~ .layer.top .screen.preview) .zcard img { filter: blur(7px) url(#zeen-dither); }
+.device > .layer.under:has(~ .layer.top .screen.preview) .zcard { opacity: 0.45; }
+.device > .layer.under:has(~ .layer.top .screen.preview) :is(.zcard-tag, .zcard-badge) { filter: blur(2px); opacity: 0.3; }
+/* the feed's header would peek out around the preview's controls */
+.device > .layer.under:has(~ .layer.top .screen.preview) .home-head { opacity: 0; }
+/* everything else behind the preview (new makers on the feed, a profile's header, stats, tabs, drafts and
+   shelves, a community's content) blurs, dithers and fades the same way; zine grids go card by card above */
+.device > .layer.under:has(~ .layer.top .screen.preview) :is(.pf-scroll, .soc-scroll, .home-feed) > :not(.messy-grid) { filter: blur(7px) url(#zeen-dither); opacity: 0.45; }
+/* a zine opened from the reader (its end card's "More from" row): the reader's zine, controls and card go too */
+.device > .layer.under:has(~ .layer.top .screen.preview) > .screen.read > * { filter: blur(7px) url(#zeen-dither); opacity: 0.45; }
+/* closing: the zine flies back onto its card (Preview close) while the rest of the preview fades and the
+   feed's covers sharpen back up */
+.device > .layer.leaving.leave-lift { animation: none; }
+.device > .layer.leaving .screen.preview > :not(.pv-stage) { animation: fade-out 220ms ease both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) { animation: feed-brighten 480ms ease both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) .zcard { animation: card-undither 480ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) :is(.zcard-tag, .zcard-badge) { animation: tag-undither 480ms ease both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) .home-head { animation: fade-in 360ms ease both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) :is(.pf-scroll, .soc-scroll, .home-feed) > :not(.messy-grid) { animation: card-undither 480ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.device > .layer.top:has(~ .layer.leaving .screen.preview) > .screen.read > * { animation: card-undither 480ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+@keyframes feed-brighten { from { filter: brightness(0.96); } to { filter: brightness(1); } }
+@keyframes card-undither { from { filter: blur(7px); opacity: 0.45; } to { filter: blur(0px); opacity: 1; } }
+@keyframes tag-undither { from { filter: blur(2px); opacity: 0.3; } to { filter: blur(0px); opacity: 1; } }
+/* the album pop-up treats the screen it opens over the same way: its content dithers, its background doesn't */
+.device:has(> .album-pop.on) > .layer.top { filter: brightness(0.96); }
+.device:has(> .album-pop.on) > .layer.top .screen > * { filter: blur(7px) url(#zeen-dither); opacity: 0.45; }
 
 /* ================================================================ Home */
 
 .home-head {
   position: absolute; left: 0; right: 0; top: 0; z-index: 20;
-  padding: calc(var(--safe-top) + 6px) 20px 10px;
+  padding: calc(var(--safe-top) + 6px) 20px 34px;
   display: flex; align-items: center; justify-content: space-between;
-  background: linear-gradient(var(--canvas) 62%, rgba(246, 246, 246, 0));
+  /* solid behind the logo and tabs; the fade starts below them */
+  background: linear-gradient(var(--canvas) calc(100% - 26px), rgba(246, 246, 246, 0));
+  pointer-events: none;
   transition: box-shadow var(--t-med);
 }
-.logo {
-  position: relative;
-  font-family: 'Pinyon Script', cursive;
-  font-size: 30px; line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  padding: 4px 10px 0 2px;
-  user-select: none;
-}
-.logo-dot { position: absolute; right: 0; bottom: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.home-head > * { pointer-events: auto; }
+/* the Zeen wordmark (public/assets/brand/zeen-logo.svg) */
+.logo { display: block; height: 28px; width: auto; margin-left: 2px; user-select: none; }
 .home-tabs { display: flex; gap: 2px; }
 .home-tabs button {
   height: 36px; padding: 0 9px;
@@ -38,8 +59,14 @@
   animation: pop-in 260ms var(--ease-spring) both;
 }
 
-.home-scroll { position: absolute; inset: 0; padding: calc(var(--safe-top) + 64px) 0 calc(var(--safe-bottom) + 150px); }
+.home-scroll { position: absolute; inset: 0; padding: calc(var(--safe-top) + 78px) 0 calc(var(--safe-bottom) + 150px); }
+.home-scroll { touch-action: pan-y; }
 .home-feed { animation: fade-up 320ms var(--ease-out) both; }
+/* the pager (Home): Discover, Following and your profile side by side; the row follows a sideways drag */
+.home-pager { position: absolute; inset: 0; overflow: hidden; touch-action: pan-y; }
+.home-track { position: absolute; inset: 0; display: flex; will-change: transform; }
+.home-page { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; }
+.home-head { will-change: transform; }
 
 .hp-strip { gap: 12px; padding: 4px 20px 26px; scroll-snap-type: x mandatory; }
 .hp-card {
@@ -61,7 +88,7 @@
   background: rgba(240, 232, 200, 0.85); transform: rotate(6deg); box-shadow: 0 1px 2px rgba(0,0,0,.05);
 }
 .hp-card:active { transform: rotate(var(--rot)) scale(0.96); }
-.hp-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: var(--hpc); text-transform: uppercase; }
+.hp-tag { font-size: 11px; font-weight: 600; color: var(--hpc); }
 .hp-title { font-family: 'DM Serif Display', serif; font-size: 22px; line-height: 1.1; color: var(--ink); }
 .hp-due { font-size: 11px; color: var(--mute); }
 
@@ -70,13 +97,13 @@
 .nm-row { gap: 10px; padding: 2px 22px 6px; }
 .nm-card {
   flex: none; width: 116px; padding: 14px 10px 10px;
-  background: #fff; border-radius: 16px; box-shadow: var(--shadow-1);
+  background: #fff; border-radius: 13px; box-shadow: var(--shadow-1);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .nm-face { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .nm-face span { font-size: 13px; font-weight: 600; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nm-face small { font-size: 11px; color: var(--mute); }
-.nm-follow { height: 30px; width: 100%; border-radius: 15px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 500; transition: transform var(--t-fast) var(--ease-spring); }
+.nm-follow { height: 30px; width: 100%; border-radius: 13px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 500; transition: transform var(--t-fast) var(--ease-spring); }
 .nm-follow:active { transform: scale(0.94); }
 
 .empty-feed { padding: 120px 40px; text-align: center; color: var(--mute); display: grid; gap: 16px; justify-items: center; }
@@ -88,11 +115,16 @@
 .search-field {
   display: flex; align-items: center; gap: 8px;
   height: 44px; padding: 0 12px;
-  background: var(--chip); border-radius: 12px; color: var(--mute);
+  background: var(--chip); border-radius: 13px; color: var(--mute);
 }
 .search-field input { flex: 1; border: 0; outline: 0; background: none; font-size: 16px; color: var(--ink); min-width: 0; }
+.search-field input::placeholder { color: var(--mute); }
+/* the search sheet grows out of the home search field: it moves and unclips together (Sheet `from`) */
+.search-sheet { clip-path: inset(0px 0px 0px 0px round 20px 20px 0px 0px); transition: transform 380ms var(--ease-out), clip-path 380ms var(--ease-out); }
+/* it rolls up from under the bottom nav (z 70), and its dim leaves the nav bright */
+.device > .search-sheet { z-index: 62; }
 .search-field button { width: 30px; height: 30px; display: grid; place-items: center; color: var(--mute); }
-.search-idle h5, .search-results h5 { margin: 18px 0 8px; font-size: 12px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; }
+.search-idle h5, .search-results h5 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--mute); }
 .chip-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
 .sr-row {
   display: flex; align-items: center; gap: 12px; width: 100%;
@@ -106,38 +138,39 @@
 .sr-thumb { width: 40px; height: 48px; flex: none; display: grid; place-items: center; }
 .sr-thumb img { max-width: 100%; max-height: 100%; filter: drop-shadow(0 2px 3px rgba(0,0,0,.15)); }
 .sr-thumb.album img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
-.sr-badge { width: 40px; height: 40px; border-radius: 10px; color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; }
+.sr-badge { width: 40px; height: 40px; border-radius: 13px; color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; }
 .search-empty { text-align: center; color: var(--mute); padding: 60px 20px; }
 
 /* ================================================================ shared bits */
 
-.music-chip {
-  display: inline-flex; align-items: center; gap: 9px;
-  height: 46px; padding: 0 7px 0 7px;
-  background: rgba(255,255,255,0.94); border-radius: 23px;
-  box-shadow: var(--shadow-2);
-  max-width: 260px;
+.music-tile {
+  position: relative; display: block; width: 46px; height: 46px; padding: 3px; border-radius: 13px;
+  background: #fff; box-shadow: var(--shadow-2);
   transition: transform var(--t-fast) var(--ease-spring);
   animation: fade-up 320ms var(--ease-out) 120ms both;
 }
-.music-chip:active { transform: scale(0.95); }
-.music-chip img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
-.music-chip img.spin { animation: spin 6s linear infinite; }
-.mc-text { display: flex; flex-direction: column; text-align: left; min-width: 0; line-height: 1.15; }
-.mc-text b { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-text small { font-size: 10px; color: var(--mute); }
-.mc-btn { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; flex: none; margin-left: 4px; }
-.music-chip.compact { height: 40px; padding: 0 4px; gap: 0; }
-.music-chip.compact .mc-text, .music-chip.compact .mc-btn { display: none; }
+.music-tile:active { transform: scale(0.94); }
+.music-tile img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 13px; }
+
+/* album pop-up: the cover, big, over a dithered screen */
+.album-pop {
+  position: absolute; inset: 0; z-index: 80; display: grid; place-items: center;
+  opacity: 0; pointer-events: none; transition: opacity 240ms ease;
+}
+.album-pop.on { opacity: 1; pointer-events: auto; }
+/* catches the tap that closes it; the dither itself is the layer filter above */
+.ap-dither { position: absolute; inset: 0; }
+.ap-card {
+  position: relative; width: min(78%, 300px); display: flex; flex-direction: column; gap: 14px;
+  transform: translateY(18px) scale(0.92); transition: transform 380ms var(--ease-spring);
+}
+.album-pop.on .ap-card { transform: none; }
+.ap-cover { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 13px; box-shadow: 0 24px 48px rgba(0,0,0,0.28), 0 4px 10px rgba(0,0,0,0.12); }
+.ap-meta { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 0 8px; line-height: 1.25; text-shadow: 0 0 10px #fff, 0 0 4px #fff, 0 0 2px #fff; }
+.ap-meta b { font-size: 16px; font-weight: 600; color: var(--ink); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-meta small { font-size: 13px; color: var(--mute); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.heart-sticker {
-  position: absolute; z-index: 6; pointer-events: none;
-  transform: translate(-50%, -50%) rotate(-10deg);
-  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.25));
-}
-.heart-sticker.slap { animation: slap 460ms var(--ease-out) both; }
-.reader-sticker { position: absolute; z-index: 6; pointer-events: none; filter: drop-shadow(0 3px 4px rgba(0,0,0,0.25)); animation: pop-in 320ms var(--ease-spring) both; }
 
 .icon-btn.liked { color: var(--accent); }
 .icon-btn.liked svg { fill: var(--accent); animation: pop-in 320ms var(--ease-spring); }
@@ -160,33 +193,18 @@
 /* ================================================================ Preview */
 
 .screen.preview { background: transparent; }
-.pv-backdrop {
-  position: absolute; inset: 0;
-  background: rgba(30, 30, 30, 0.04);
-  animation: fade-in 260ms ease both;
-}
-.pv-dither {
-  position: absolute; inset: 0; pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'%3E%3Crect width='1' height='1' fill='%23000'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23000'/%3E%3Crect x='1' y='3' width='1' height='1' fill='%23fff'/%3E%3Crect x='3' y='1' width='1' height='1' fill='%23fff'/%3E%3C/svg%3E");
-  background-size: 4px 4px;
-  image-rendering: pixelated;
-  opacity: 0.12;
-  mix-blend-mode: overlay;
-  animation: pv-dither-in 260ms ease both;
-}
-@keyframes pv-dither-in { from { opacity: 0; } to { opacity: 0.12; } }
-.pv-music { position: absolute; left: 0; right: 0; top: calc(var(--safe-top) + 62px); display: flex; justify-content: center; z-index: 12; }
+.pv-music { position: absolute; right: 14px; top: calc(var(--safe-top) + 62px); z-index: 12; }
 .pv-stage {
   position: absolute; left: 0; right: 0;
-  top: calc(var(--safe-top) + 112px); bottom: calc(var(--safe-bottom) + 256px);
+  top: calc(var(--safe-top) + 112px); bottom: calc(var(--safe-bottom) + 200px);
   z-index: 5; transform-origin: center;
   will-change: transform;
 }
 .pv-stage .gated { filter: blur(16px); }
-.pv-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 238px); text-align: center; font-size: 12px; color: rgba(255,255,255,0.8); z-index: 6; pointer-events: none; animation: fade-in 400ms ease 500ms both; text-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.pv-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 182px); text-align: center; font-size: 12px; color: rgba(26,26,26,0.62); z-index: 6; pointer-events: none; animation: fade-in 400ms ease 500ms both; text-shadow: 0 0 6px rgba(255,255,255,.7); }
 .pv-info {
   position: absolute; left: 14px; right: 14px; bottom: calc(var(--safe-bottom) + 86px); z-index: 12;
-  background: rgba(255,255,255,0.96); border-radius: 22px; padding: 14px 14px 12px;
+  background: rgba(255,255,255,0.96); border-radius: 13px; padding: 14px 14px 12px;
   box-shadow: var(--shadow-2);
   animation: fade-up 380ms var(--ease-out) 140ms both;
 }
@@ -198,19 +216,10 @@
 .pv-maker .btn-dark.following { background: var(--chip); color: var(--ink); }
 .pv-comm { font-size: 12px; color: var(--mute); margin: 6px 0 0 44px; }
 .pv-comm button { font-weight: 600; font-size: 12px; }
-.pv-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.pv-act {
-  height: 44px; padding: 0 12px; border-radius: 12px;
-  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2);
-  background: var(--chip);
-  transition: transform var(--t-fast) var(--ease-spring);
-}
-.pv-act:active { transform: scale(0.94); }
-.pv-read { flex: 1; font-size: 15px; font-weight: 600; }
 
 .content-note {
   position: absolute; left: 40px; right: 40px; top: 34%; z-index: 14;
-  background: #fff; border-radius: 20px; padding: 22px 20px 18px;
+  background: #fff; border-radius: 13px; padding: 22px 20px 18px;
   text-align: center; box-shadow: var(--shadow-2);
   display: grid; justify-items: center; gap: 6px;
   animation: pop-in 300ms var(--ease-spring) both;
@@ -233,18 +242,16 @@
   padding-bottom: var(--safe-bottom);
 }
 .pull-tab.open { --pt-y: 0px; }
-.pt-grab { height: 22px; display: grid; place-items: center; touch-action: none; cursor: grab; flex: none; }
-.pt-grab span { width: 36px; height: 4px; border-radius: 2px; background: #DADADA; }
 .pt-tabs { display: flex; gap: 4px; padding: 0 14px; flex: none; order: 2; opacity: 0; transition: opacity var(--t-fast); }
 .pull-tab.open .pt-tabs { opacity: 1; }
-.pt-tabs button { height: 36px; padding: 0 12px; font-size: 13px; color: var(--mute); border-radius: 18px; }
+.pt-tabs button { height: 36px; padding: 0 12px; font-size: 13px; color: var(--mute); border-radius: 13px; }
 .pt-tabs button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
 .pt-body { flex: 1; order: 3; padding: 8px 18px 16px; }
 .pt-input {
   order: 1; flex: none;
   margin: 2px 14px 10px; height: 46px;
   display: flex; align-items: center;
-  border: 1.5px solid #E3E3E3; border-radius: 23px; padding: 0 6px 0 18px;
+  border: 1.5px solid #E3E3E3; border-radius: 13px; padding: 0 6px 0 18px;
 }
 .pt-input input { flex: 1; border: 0; outline: 0; background: none; font-size: 14px; min-width: 0; }
 .pt-input button { width: 36px; height: 36px; display: grid; place-items: center; color: var(--ink-2); border-radius: 50%; }
@@ -272,9 +279,24 @@
 
 /* ================================================================ Read */
 
+/* The fold handle in the reader and the editor: a small, soft orb of light that breathes (no rings or rays). */
+:is(.read, .create, .explore) .fold-handle .fh-core {
+  width: 12px; height: 12px;
+  background: radial-gradient(circle, rgba(255,255,255,0.95) 0 22%, rgba(255,255,255,0.55) 45%, rgba(255,255,255,0) 72%);
+  /* white glow for dark pages, a faint grey shadow so it still reads on blank white paper */
+  box-shadow: 0 0 10px 3px rgba(255,255,255,0.35), 0 1px 5px 1px rgba(0,0,0,0.16);
+  filter: blur(0.6px);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  animation: orb-breathe 2.6s ease-in-out infinite;
+}
+:is(.read, .create, .explore) .fold-handle .fh-core::before { display: none; }
+:is(.read, .create, .explore) .fold-handle.active .fh-core { transform: scale(1.3); animation: none; box-shadow: 0 0 14px 5px rgba(255,255,255,0.45), 0 1px 6px 1px rgba(0,0,0,0.18); }
+@keyframes orb-breathe { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.15); opacity: 1; } }
+
+
 .read .top-bar { align-items: flex-start; }
 .page-ind {
-  margin-top: 8px; height: 30px; padding: 0 12px; border-radius: 15px;
+  margin-top: 8px; height: 30px; padding: 0 12px; border-radius: 13px;
   background: rgba(255,255,255,0.92); box-shadow: var(--shadow-1);
   display: grid; place-items: center; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -284,35 +306,30 @@
 .read-coach {
   position: absolute; left: 0; right: 0; margin: 0 auto; width: max-content; bottom: calc(var(--safe-bottom) + 188px); z-index: 25;
   display: flex; align-items: center; gap: 8px;
-  height: 36px; padding: 0 16px 0 12px; border-radius: 18px;
+  height: 36px; padding: 0 16px 0 12px; border-radius: 13px;
   background: var(--ink); color: #fff; font-size: 13px; white-space: nowrap;
   box-shadow: var(--shadow-2);
   animation: fade-up 400ms var(--ease-out) 600ms both;
   pointer-events: none;
 }
-.rc-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px 3px rgba(255,255,255,0.8); animation: fh-pulse 2s ease-in-out infinite; }
+/* the coach's dot is the same orb */
+.rc-dot { width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle, #fff 0 24%, rgba(255,255,255,0.6) 48%, rgba(255,255,255,0) 74%); box-shadow: 0 0 8px 2px rgba(255,255,255,0.35); animation: orb-breathe 2.6s ease-in-out infinite; }
 .read-bottom {
   position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 10px); z-index: 15;
   display: flex; flex-direction: column; align-items: stretch; gap: 6px;
 }
 .read-caption { text-align: center; font-size: 12px; color: #B5B5B5; height: 16px; }
-.flow-chip {
-  position: absolute; left: 0; right: 0; margin: 0 auto; width: max-content; top: -42px;
-  height: 36px; padding: 0 14px; border-radius: 18px;
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--accent); color: #fff; font-size: 13px; font-weight: 600;
-  box-shadow: 0 6px 16px rgba(255,73,52,0.35);
-  animation: pop-in 280ms var(--ease-spring) both;
-}
-.kf-strip { gap: 14px; padding: 4px 30px; justify-content: safe center; align-items: center; height: 62px; transition: opacity var(--t-med); }
-.kf-strip.dimmed { opacity: 0.35; }
+/* a carousel: half a screen of room at each end, so whichever keyframe is current can sit in the middle, over the ruler's playhead */
+.kf-strip { gap: 14px; padding: 4px 0; justify-content: flex-start; align-items: center; height: 62px; transition: opacity var(--t-med); }
+/* the room is a spacer rather than padding, so even a wide first or last thumbnail can reach the middle */
+.kf-strip::before, .kf-strip::after { content: ''; flex: none; width: calc(50% - 14px); height: 1px; }
 .kf-thumb {
   flex: none; height: 44px; min-width: 30px;
   display: grid; place-items: center;
   opacity: 0.45;
   transition: opacity var(--t-fast), transform var(--t-med) var(--ease-spring);
 }
-.kf-thumb img { height: 44px; width: auto; max-width: 64px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.15)); }
+.kf-thumb img { image-rendering: pixelated; height: 44px; width: auto; max-width: 64px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.15)); }
 .kf-thumb span { width: 30px; height: 40px; background: #E8E8E8; border-radius: 2px; }
 .kf-thumb.on { opacity: 1; transform: scale(1.25); }
 .ruler-row { display: flex; align-items: center; gap: 2px; padding: 0 6px; }
@@ -324,26 +341,23 @@
 .lp-dim { position: absolute; inset: 0; z-index: 70; }
 .lp-pos { position: absolute; z-index: 71; transform: translateX(-50%); }
 .lp-menu {
-  display: flex; background: #fff; border-radius: 12px; box-shadow: var(--shadow-2);
+  display: flex; background: #fff; border-radius: 13px; box-shadow: var(--shadow-2);
   overflow: hidden;
   animation: pop-in 220ms var(--ease-spring) both;
 }
 .lp-menu button { height: 38px; padding: 0 12px; font-size: 12px; color: var(--ink); white-space: nowrap; }
 .lp-menu button + button { border-left: 1px solid #EFEFEF; }
 .lp-menu button:active { background: #F5F5F5; }
-.sticker-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 4px 0 12px; }
-.sticker-pick button { aspect-ratio: 1; display: grid; place-items: center; border-radius: 14px; background: #F7F7F7; transition: transform var(--t-fast) var(--ease-spring); }
-.sticker-pick button:active { transform: scale(0.9) rotate(-6deg); }
-.sticker-pick img { max-width: 76%; max-height: 76%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)); }
 
 .end-card .sheet-body { padding-top: 0; }
 .end-head { text-align: center; margin-bottom: 14px; }
-.end-fin { font-family: 'Pinyon Script', cursive; font-size: 44px; line-height: 1; display: block; }
+/* the script's tall f rises above its line: give it room so the sheet's scroll area doesn't crop it */
+.end-fin { font-family: 'Pinyon Script', cursive; font-size: 44px; line-height: 1.3; padding-top: 10px; display: block; }
 .end-head p { margin: 4px 0 0; color: var(--mute); font-size: 13px; }
 .end-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .end-actions button {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 12px 0; border-radius: 14px; background: var(--chip); font-size: 12px; color: var(--ink-2);
+  padding: 12px 0; border-radius: 13px; background: var(--chip); font-size: 12px; color: var(--ink-2);
   transition: transform var(--t-fast) var(--ease-spring), color var(--t-fast);
 }
 .end-actions button:active { transform: scale(0.93); }
@@ -353,5 +367,3 @@
 .end-more { flex: none; width: 74px; }
 .end-more img { width: 100%; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
 
-/* create.css defines a global .kf; keep the shared Ruler's keyframe ticks thin */
-.ruler .tick.kf { min-width: 0; height: 15px; width: 1.5px; opacity: 1; display: block; transform: none; flex: none; gap: 0; }

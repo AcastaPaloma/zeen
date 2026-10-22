@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ZINE_FONTS } from '../lib/assets'
 import { luminance } from '../lib/compose'
 import { haptic } from '../lib/feedback'
-import { rng } from '../lib/geom'
 import type { TextObj, TextStyle, ZineFont } from '../lib/types'
-import { Icon, type IconName } from '../ui/Icon'
+import type { IconName } from '../ui/Icon'
+import { Ransom } from '../ui/Ransom'
 import { CheckBtn, IconBtn, PillGroup } from '../ui/kit'
 import './collage-sheets.css'
 
@@ -13,26 +13,6 @@ const FONTS = Object.keys(ZINE_FONTS) as ZineFont[]
 const STYLES: TextStyle[] = ['plain', 'box', 'outline']
 const ALIGNS: TextObj['align'][] = ['center', 'left', 'right']
 const ALIGN_ICON: Record<TextObj['align'], IconName> = { left: 'alignLeft', center: 'alignCenter', right: 'alignRight' }
-const RANSOM_FONTS = ['"Anton"', '"DM Serif Display"', '"Special Elite"', '"Permanent Marker"', '"Stardos Stencil"', '"Rubik Mono One"']
-const RANSOM_BG = ['#FFFFFF', '#F8D647', '#111111', '#FF4934', '#C0F6FF', '#FFD5F4', '#EBEFD7', '#245AE2']
-
-/** Each letter cut from a different magazine. */
-function Ransom({ text, seed = 7, size = 1 }: { text: string; seed?: number; size?: number }) {
-  const r = rng(seed)
-  return (
-    <>
-      {[...text].map((ch, i) => {
-        if (ch === '\n') return <br key={i} />
-        if (ch === ' ') { r(); r(); r(); return <span key={i} className="rn-sp"> </span> }
-        const f = RANSOM_FONTS[Math.floor(r() * RANSOM_FONTS.length)]
-        const bg = RANSOM_BG[Math.floor(r() * RANSOM_BG.length)]
-        const rot = (r() - 0.5) * 14
-        const dark = bg === '#111111' || bg === '#245AE2' || bg === '#FF4934'
-        return <span key={i} className="rn-ch" style={{ fontFamily: f, background: bg, color: dark ? '#fff' : '#111', transform: `rotate(${rot}deg)`, fontSize: `${size}em` }}>{ch}</span>
-      })}
-    </>
-  )
-}
 
 export function TextEditor({ open, initial, onDone, onCancel }: {
   open: boolean; initial: TextObj | null; onDone: (t: Pick<TextObj, 'text' | 'font' | 'color' | 'style' | 'align'>) => void; onCancel: () => void
@@ -93,7 +73,7 @@ export function TextEditor({ open, initial, onDone, onCancel }: {
       <div className="te-stage" style={{ paddingBottom: kb + 150 }} onClick={() => ta.current?.focus()}>
         <div className={`te-wrap align-${align}`}>
           {/* styled preview sits under a transparent textarea that owns the caret */}
-          <div className={`te-preview style-${style} font-${font}`} aria-hidden
+          <div className={`te-preview style-${style} font-${font} ${luminance(color) > 0.75 ? 'pale' : ''}`} aria-hidden
             style={{ fontFamily: css, color: fg, '--box': color, '--stroke': stroke, textAlign: align } as CSSProperties}>
             {!text
               ? <div className="te-line te-ph"><span>What's on your mind?</span></div>
@@ -103,7 +83,7 @@ export function TextEditor({ open, initial, onDone, onCancel }: {
           </div>
           <textarea ref={ta} className={`te-input font-${font}`} value={text} rows={Math.max(1, lines.length)}
             aria-label="Text"
-            style={{ fontFamily: css, textAlign: align, caretColor: style === 'box' ? fg : color, '--ph': luminance(color) > 0.5 ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.55)' } as CSSProperties}
+            style={{ fontFamily: css, textAlign: align, caretColor: style === 'box' ? fg : luminance(color) > 0.75 ? 'var(--ink)' : color } as CSSProperties}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) done() }} />
         </div>

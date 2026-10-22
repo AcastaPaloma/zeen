@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ALBUMS, COVERS, STICKERS } from '../lib/assets'
+import { useRef, useState, type CSSProperties } from 'react'
+import { COVERS, STICKERS } from '../lib/assets'
+import { asset } from '../lib/base'
 import { haptic, sfx } from '../lib/feedback'
 import { clamp } from '../lib/geom'
-import { music } from '../lib/music'
-import { ME } from '../lib/samples'
 import { useApp } from '../lib/store'
-import { useThumb } from '../lib/thumbs'
-import type { User, ZineDoc } from '../lib/types'
+import type { User } from '../lib/types'
 import { Icon } from '../ui/Icon'
 import { CheckBtn, PillGroup, IconBtn, Slider } from '../ui/kit'
 import './social.css'
@@ -14,18 +12,12 @@ import './social.css'
 const COLORS = ['#1A1A1A', '#245AE2', '#FF4934', '#4BA334', '#F8D647', '#F158A7', '#C0F6FF', '#EBEFD7']
 const IMAGES = [
   COVERS['forever-young'], COVERS.levels, COVERS['how-zeen'], COVERS.june,
-  '/assets/scraps/grass.webp', '/assets/scraps/night-lights.webp', '/assets/scraps/gate.webp', '/assets/scraps/orcas.webp', '/assets/scraps/friends.webp',
+  asset('/assets/scraps/grass.webp'), asset('/assets/scraps/night-lights.webp'), asset('/assets/scraps/gate.webp'), asset('/assets/scraps/orcas.webp'), asset('/assets/scraps/friends.webp'),
 ]
 const isColor = (h: string) => /^#|^rgb|^hsl/.test(h)
 
-function ZineChoice({ z, on, onClick }: { z: ZineDoc; on: boolean; onClick: () => void }) {
-  const src = useThumb(z)
-  return <button className={on ? 'on' : ''} onClick={onClick} aria-pressed={on} aria-label={z.publish.title || 'Untitled draft'}>{src && <img src={src} alt="" />}</button>
-}
-
 export default function EditProfile(_: { active: boolean }) {
   const me = useApp(s => s.me)
-  const zines = useApp(s => s.zines)
   const updateMe = useApp(s => s.updateMe)
   const back = useApp(s => s.back)
   const [d, setD] = useState<User>(() => ({ ...me, stickers: [...(me.stickers ?? [])], tags: [...me.tags] }))
@@ -33,9 +25,6 @@ export default function EditProfile(_: { active: boolean }) {
   const [tagIn, setTagIn] = useState('')
   const preview = useRef<HTMLDivElement>(null)
   const drag = useRef<{ i: number; id: number; dx: number; dy: number } | null>(null)
-  const mine = useMemo(() => Object.values(zines).filter(z => z.author === ME), [zines])
-
-  useEffect(() => () => { if (music.state.playing) music.stop() }, [])
 
   const set = (p: Partial<User>) => setD(x => ({ ...x, ...p }))
   const stickers = d.stickers ?? []
@@ -146,30 +135,6 @@ export default function EditProfile(_: { active: boolean }) {
             </div>
           </div>
 
-          <div className="ep-field">
-            <span>Profile song</span>
-            <div className="song-list">
-              <button className={`song-row ${!d.song ? 'on' : ''}`} onClick={() => { set({ song: undefined }); music.stop() }}>
-                <span style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', background: '#F2F2F2', borderRadius: 6 }}><Icon name="volumeOff" size={16} /></span>
-                <span className="sr-t"><b>No song</b><small>silence is a vibe</small></span>
-              </button>
-              {ALBUMS.flatMap(a => a.tracks.map(t => (
-                <button key={t.id} className={`song-row ${d.song === t.id ? 'on' : ''}`} onClick={() => { set({ song: t.id }); music.play(t.id, { preview: 15 }); haptic('tick') }}>
-                  <img src={a.cover} alt="" />
-                  <span className="sr-t"><b>{t.title}</b><small>{a.artist}</small></span>
-                  {d.song === t.id && <Icon name="music" size={16} />}
-                </button>
-              )))}
-            </div>
-          </div>
-
-          <div className="ep-field">
-            <span>Profile zine (unfolds on your profile)</span>
-            <div className="ep-zines">
-              {mine.map(z => <ZineChoice key={z.id} z={z} on={d.headerZine === z.id} onClick={() => { set({ headerZine: d.headerZine === z.id ? undefined : z.id }); haptic('tick') }} />)}
-              {!mine.length && <span className="muted" style={{ fontSize: 13 }}>Make a zine first, then pin it here.</span>}
-            </div>
-          </div>
         </div>
       </div>
     </div>

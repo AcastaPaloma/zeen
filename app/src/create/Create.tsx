@@ -7,7 +7,7 @@ import { useApp, type CreateStep } from '../lib/store'
 import type { PaperStock, ZineDoc } from '../lib/types'
 import { music } from '../lib/music'
 import { Icon } from '../ui/Icon'
-import { Button, CheckBtn, IconBtn, PillGroup, Sheet, VSlider } from '../ui/kit'
+import { bgVars, Button, CheckBtn, IconBtn, PillGroup, Sheet, VSlider } from '../ui/kit'
 import { ZineView } from '../ui/ZineView'
 import { HERO, type ZineScene } from '../three/ZineScene'
 import { useEditor } from './editor'
@@ -37,6 +37,7 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
   const back = useApp(s => s.back)
   const showToast = useApp(s => s.showToast)
   const ed = useEditor()
+  const dock = useEditor(s => s.dock)
   const [scene, setScene] = useState<ZineScene | null>(null)
   const [starting, setStarting] = useState(!id)
   const [draft, setDraft] = useState<ZineDoc | null>(null)
@@ -82,7 +83,7 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
   }
 
   return (
-    <div className={`screen create dots step-${starting ? 'start' : step}`} style={{ '--bg': doc?.bg } as React.CSSProperties}>
+    <div className={`screen create dots step-${starting ? 'start' : step}`} data-dock={dock} style={bgVars(doc?.bg)}>
       <ZineView doc={doc} mode="free" onScene={setScene} handles={!starting} keepAngles />
       {starting && draft && (
         <StartSheet draft={draft} setDraft={setDraft} scene={scene} replyTo={replyTo}
@@ -91,7 +92,6 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
       )}
       {!starting && doc && (
         <>
-          <Stepper step={step} onJump={goStep} />
           {step === 'cut' && <CutFold scene={scene} doc={doc} active={active} exit={exit} next={next} />}
           <Suspense fallback={null}>
             {step === 'collage' && <Collage scene={scene} doc={doc} active={active} exit={exit} next={next} />}
@@ -104,26 +104,13 @@ export default function Create({ id, replyTo, step: startStep, active }: { id?: 
   )
 }
 
-function Stepper({ step, onJump }: { step: CreateStep; onJump: (s: CreateStep) => void }) {
-  const i = STEPS.findIndex(s => s.id === step)
-  return (
-    <nav className="stepper" aria-label="Create steps">
-      {STEPS.map((s, k) => (
-        <button key={s.id} className={`st ${k === i ? 'on' : ''} ${k < i ? 'done' : ''}`} disabled={k > i + 1}
-          aria-current={k === i ? 'step' : undefined} aria-label={s.label}
-          onClick={() => k !== i && onJump(s.id)}>
-          <span className="st-bar" />
-        </button>
-      ))}
-      <span className="st-label" key={step}>{STEPS[i].label}</span>
-    </nav>
-  )
-}
-
 // ---------------------------------------------------------------- start
 
 const TEMPLATES: { id: TemplateId; label: string }[] = [
-  { id: 'half', label: 'Half fold' },
+  { id: 'half', label: '4-page' },
+  { id: 'book8', label: '8-page' },
+  { id: 'book12', label: '12-page' },
+  { id: 'book16', label: '16-page' },
   { id: 'gatefold', label: 'Gatefold' },
   { id: 'accordion', label: 'Accordion' },
   { id: 'trifold', label: 'Tri-fold' },
@@ -139,6 +126,19 @@ const STOCKS: { id: PaperStock; label: string; img?: string }[] = [
   { id: 'construction', label: 'Construction', img: PAPER.watercolor },
 ]
 
+/** An open booklet with fanned pages on the left. */
+function Booklet({ leaves }: { leaves: number }) {
+  return (
+    <>
+      <path d="M22 9 36 6v28l-14 3Z" />
+      {Array.from({ length: leaves }, (_, i) => {
+        const x = 9 + i * 2.2
+        return <path key={i} d={`M22 9 ${x} ${6 + i * 0.6}v28l${22 - x} ${3 - i * 0.6}`} />
+      })}
+    </>
+  )
+}
+
 function TemplateGlyph({ id }: { id: TemplateId }) {
   const g = {
     half: <><path d="M14 10 26 6v30l-12 4Z" /><path d="M26 6l10 5v29l-10-4" /><path d="M14 40 26 36" strokeDasharray="2 2" /></>,
@@ -146,6 +146,9 @@ function TemplateGlyph({ id }: { id: TemplateId }) {
     accordion: <><path d="M4 12l9-4v26l-9 4Z" /><path d="M13 8l9 4v26l-9-4" /><path d="M22 12l9-4v26l-9 4Z" /><path d="M31 8l9 4v26l-9-4" /></>,
     trifold: <><path d="M8 12 20 8v26L8 38Z" /><path d="M20 8l12 4v26l-12-4" /><path d="M32 12l8-6v26l-8 6" /></>,
     blank: <path d="M10 8h24v30H10Z" />,
+    book8: <Booklet leaves={2} />,
+    book12: <Booklet leaves={3} />,
+    book16: <Booklet leaves={4} />,
   }[id]
   return (
     <svg viewBox="0 0 44 44" width={52} height={52} fill="none" stroke="#1A1A1A" strokeWidth={1.3} strokeLinejoin="round" aria-hidden>
@@ -224,7 +227,7 @@ function StartSheet({ draft, setDraft, scene, onCancel, onContinue, replyTo }: {
               {COLORS.slice(0, 5).map(c => (
                 <button key={c} className={`sw ${color === c ? 'on' : ''}`} style={{ background: c }} aria-label={`Paper colour ${c}`} onClick={() => { haptic('tick'); update(tpl, size, c) }} />
               ))}
-              <label className="sw spectrum" aria-label="Custom colour" style={{ backgroundImage: `url(${PAPER.spectrum})` }}>
+              <label className="sw spectrum" aria-label="Custom colour">
                 <input type="color" value={color} onChange={e => update(tpl, size, e.target.value)} />
               </label>
             </div>

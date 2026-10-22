@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { loadImage, TOOLS, trackById } from '../lib/assets'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { loadImage, trackById } from '../lib/assets'
 import { haptic, sfx } from '../lib/feedback'
 import { uid } from '../lib/geom'
 import { music } from '../lib/music'
@@ -7,27 +7,26 @@ import { flatToPage } from '../lib/paper'
 import { useApp } from '../lib/store'
 import type { InkObj, InkTool, ScrapItem, ScrapObj, Side, Stroke, TextObj, Vec2, ZineDoc, ZObject } from '../lib/types'
 import { FEELS } from '../three/spring'
-import type { PageRef, PointerInfo, TwoInfo, ZineScene } from '../three/ZineScene'
+import type { PointerInfo, TwoInfo, ZineScene } from '../three/ZineScene'
 import { Icon } from '../ui/Icon'
-import { CheckBtn, DitherImg, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Slider, Toggle, VSlider } from '../ui/kit'
+import { CheckBtn, IconBtn, PillGroup, Row, Ruler, Segmented, Sheet, Slider, Toggle, VSlider } from '../ui/kit'
 import { boxCorners, isClipped, objectAt, objectBox, pageRect, pagesOf, pageThumb, transformObject } from './collageUtil'
 import type { StepProps } from './Create'
 import { HistorySheet } from './CutFold'
+import { KeyframeStrip } from './KeyframeStrip'
 import { useEditor } from './editor'
 import { EffectsSheet } from './EffectsSheet'
 import { LayersSheet } from './LayersSheet'
 import { MusicPicker } from './MusicPicker'
-import { ScrapSheet } from './ScrapSheet'
+import { ScrapSheet, ScrapTab } from './ScrapSheet'
 import { SpreadView } from './SpreadView'
 import { TextEditor } from './TextEditor'
+import { CollageTray } from './Trays'
 
 type SheetName = 'none' | 'scrap' | 'effects' | 'layers' | 'music' | 'bg' | 'more' | 'ink' | 'history'
 
-const INK_TOOLS: { id: InkTool; src: string; label: string; h: number }[] = [
-  { id: 'pencil', src: TOOLS.pencil, label: 'Pencil', h: 96 },
-  { id: 'pen', src: TOOLS.pen, label: 'Pen', h: 92 },
-  { id: 'marker', src: TOOLS.marker, label: 'Marker', h: 84 },
-  { id: 'eraser', src: TOOLS.eraser, label: 'Eraser', h: 58 },
+const INK_TOOLS: { id: InkTool; label: string }[] = [
+  { id: 'pencil', label: 'Pencil' }, { id: 'pen', label: 'Pen' }, { id: 'marker', label: 'Marker' }, { id: 'eraser', label: 'Eraser' },
 ]
 const INK_COLORS = ['#1A1A1A', '#FFFFFF', '#FF4934', '#F8D647', '#DEFF7C', '#4BA334', '#245AE2', '#5C5CE3', '#F158A7', '#E8614A', '#8B5A2B']
 const BG_COLORS = ['#F6F6F6', '#EEEDE9', '#FFFFFF', '#1A1A1A', '#FFD5F4', '#C0F6FF', '#EBEFD7', '#F8D647', '#FF4934', '#245AE2', '#4BA334', '#5C5CE3']
@@ -52,13 +51,13 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
   const showToast = useApp(s => s.showToast)
   const [drawing, setDrawing] = useState(false)
   const [sheet, setSheet] = useState<SheetName>('none')
+  // how far the scrap tab has pulled its panel into view, mid-drag
+  const [scrapPull, setScrapPull] = useState<number | null>(null)
   const [face, setFace] = useState<{ panel: string; side: Side } | null>(null)
-  const [pages, setPages] = useState<PageRef[]>([])
   const [spread, setSpread] = useState(false)
   const [text, setText] = useState<{ open: boolean; initial: TextObj | null }>({ open: false, initial: null })
   const [zoom, setZoom] = useState(0.39)
   const [kfT, setKfT] = useState(0)
-  const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [guides, setGuides] = useState<{ x?: [number, number][]; y?: [number, number][] }>({})
   const [colorOpen, setColorOpen] = useState(false)
   const [mutedMusic, setMutedMusic] = useState(false)
@@ -78,8 +77,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
   useEffect(() => {
     if (!scene) return
     scene.oneFingerSwipe = false
-    const offPages = scene.on('pages', (p: PageRef[]) => setPages(p))
-    setPages(scene.pages)
     // start on the first page, flat and face-on
     const first = scene.pages[0]
     if (first) { scene.facePanel(first.panel, first.side, { focus: true }); setFace({ panel: first.panel, side: first.side }) }
@@ -102,7 +99,7 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
       useEditor.setState({ doc: nd })
       useApp.getState().saveZine(nd)
     })
-    return () => { offPages(); offUp(); offView(); offCommit(); scene.oneFingerSwipe = true }
+    return () => { offUp(); offView(); offCommit(); scene.oneFingerSwipe = true }
   }, [scene])
 
   useEffect(() => { scene?.setZoom(0.5 * Math.pow(6, zoom)) }, [scene, zoom])
@@ -113,20 +110,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
     else music.stop()
     return () => music.stop()
   }, [doc.music, mutedMusic])
-
-  // page strip thumbnails, cut from the live textures
-  useEffect(() => {
-    if (!scene) return
-    const t = setTimeout(() => {
-      const out: Record<string, string> = {}
-      for (const p of pages) {
-        const c = pageThumb(scene, p.panel, p.side, 96)
-        if (c) out[`${p.panel}:${p.side}`] = c.toDataURL('image/webp', 0.7)
-      }
-      setThumbs(out)
-    }, 450)
-    return () => clearTimeout(t)
-  }, [scene, pages, doc.objects, doc.surfaces, doc.bg])
 
   // ---------------------------------------------------------------- selection overlay (imperative, per frame)
 
@@ -161,6 +144,15 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
     if (label) commit(nd, label); else ed.live(nd)
   }
 
+  /** Fold into keyframe i, then face whichever page it leaves towards us. */
+  const goKeyframe = (i: number) => {
+    const kf = doc.keyframes[i]
+    if (!scene || !kf) return
+    setKfT(i)
+    scene.setAngles(kf.angles, { feel: FEELS[doc.transition.feel], sequential: doc.transition.mode === 'sequential' })
+    setTimeout(() => { const f = scene.nearestFace(); if (f) { scene.facePanel(f.panel, f.side, { focus: true }); setFace(f) } }, 450)
+  }
+
   const focusPage = useCallback((panel: string, side: Side) => {
     if (!scene) return
     scene.facePanel(panel, side, { focus: true })
@@ -168,8 +160,22 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
     haptic('tick')
   }, [scene])
 
+  /**
+   * Where a new scrap or text goes: on the page most in view, in the middle of what's showing of it, so it
+   * never lands on a page hidden under another one (ZineScene.topHit).
+   */
   const currentPageCenter = (): { surface: string; side: Side; p: Vec2; w: number } | null => {
     if (!scene) return null
+    const hit = scene.topHit()
+    const s = hit && scene.d.surfaces.get(hit.surface)
+    if (hit && s) {
+      const r = pageRect(scene, hit.panel, hit.side)
+      // sized to what's showing of that page, so a new piece doesn't start out tucked under another layer
+      const xs = hit.seen.map(p => p[0]), ys = hit.seen.map(p => p[1])
+      const seen = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+      const page = r ? Math.min(r.w, r.h) : Math.min(s.frame.w, s.frame.h)
+      return { surface: hit.surface, side: hit.side, p: flatToPage(s.frame, hit.side, hit.flat), w: Math.min(page, Math.max(seen * 1.15, page * 0.4)) }
+    }
     const f = face ?? scene.nearestFace()
     if (!f) return null
     const r = pageRect(scene, f.panel, f.side)
@@ -222,11 +228,13 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           gest.current = { kind: 'draw', panel: hit.panel, side: hit.side, surface: hit.surface, stroke, inkId: id }
           return true
         }
-        if (!hit) { ed.select(null); return false }
+        // a finger landing off the selected piece doesn't drop it yet: it may be the first of two that pinch
+        // it (twoStart). A tap on empty space lets go of it (tap below).
+        if (!hit) return false
         const s = scene.d.surfaces.get(hit.surface)!
         const pp = flatToPage(s.frame, hit.side, hit.flat)
         const o = objectAt(docRef.current, hit.surface, hit.side, pp)
-        if (!o) { if (useEditor.getState().selected) haptic('tick'); ed.select(null); return false }
+        if (!o) return false
         const wasSelected = useEditor.getState().selected === o.id
         if (!wasSelected) { ed.select(o.id); haptic('tick') }
         gest.current = { kind: 'move', panel: hit.panel, side: hit.side, surface: hit.surface, obj: o.id, base: o, start: pp, wasSelected }
@@ -295,19 +303,17 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           ed.live({ ...d, objects: d.objects.map(o => (o.id === g.obj ? g.base! : o)) })
         }
       },
+      // Like Procreate's transform: while a piece is selected, two fingers anywhere pinch it bigger or smaller,
+      // twist it and slide it along with them. With nothing selected, two fingers move the camera as usual.
       twoStart: (t: TwoInfo) => {
         const id = useEditor.getState().selected
         const o = docRef.current.objects.find(x => x.id === id)
         if (!o || o.locked) return false
-        // only when the fingers are on (or around) the selected object
         const b = objectBox(o)
         const panel = scene.panelAt(o.surface, o.side, [b.cx, b.cy])
         if (!panel) return false
-        const pts = boxCorners(b).map(p => scene.pageToScreen(panel, o.side, p))
-        const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
-        const pad = 50
-        if (t.cx < Math.min(...xs) - pad || t.cx > Math.max(...xs) + pad || t.cy < Math.min(...ys) - pad || t.cy > Math.max(...ys) + pad) return false
         gest.current = { kind: 'two', panel, side: o.side, surface: o.surface, obj: o.id, base: o, two: { scale: 1, rot: 0, cx: t.cx, cy: t.cy } }
+        haptic('tick')
         return true
       },
       twoMove: (t: TwoInfo) => {
@@ -323,6 +329,11 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
         ed.live({ ...d, objects: d.objects.map(o => (o.id === g.obj ? moved : o)) })
       },
       twoEnd: () => { gest.current = null; commit(docRef.current, 'Transform') },
+      tap: () => {
+        // a tap off any piece lets go of the selected one
+        if (!useEditor.getState().selected) return
+        haptic('tick'); ed.select(null)
+      },
       doubleTap: (p: PointerInfo) => {
         const hit = scene.pick(p.x, p.y)
         if (!hit) return false
@@ -464,8 +475,6 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
 
   // ---------------------------------------------------------------- render data
 
-  const groups = useMemo(() => ({ front: pages.filter(p => p.side === 'front'), back: pages.filter(p => p.side === 'back') }), [pages])
-  const faceN = face && scene ? scene.pageOf(face.panel, face.side) : 0
   const track = trackById(doc.music?.track)
   const effectScopes = {
     scrap: selected?.kind === 'scrap' ? selected.id : undefined,
@@ -510,19 +519,11 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           : <PillGroup className="solo"><IconBtn name="right" label="Next: Finalize" onClick={() => { ed.select(null); next() }} /></PillGroup>}
       </div>
 
-      {face && (
-        <button className="orient-chip" onClick={() => setSpread(true)} aria-label="Show all pages">
-          <span className={`oc-side ${face.side}`}>{face.side === 'front' ? 'Front' : 'Back'}</span>
-          <span>P{faceN || 1}</span>
-          <Icon name="pages" size={14} />
-        </button>
-      )}
-
       <div className="rail right">
         <VSlider value={zoom} onChange={setZoom} label="Zoom" />
         {drawing ? (
           <>
-            <VSlider variant="gradient" value={Math.min(1, ink.size[ink.tool] / (ink.tool === 'eraser' ? 2 : ink.tool === 'marker' ? 1 : 0.5))} label="Brush size"
+            <VSlider variant="gradient" wedge value={Math.min(1, ink.size[ink.tool] / (ink.tool === 'eraser' ? 2 : ink.tool === 'marker' ? 1 : 0.5))} label="Brush size"
               onChange={v => ed.setInk({ size: { ...ink.size, [ink.tool]: Math.max(0.03, v * (ink.tool === 'eraser' ? 2 : ink.tool === 'marker' ? 1 : 0.5)) } })} />
             <PillGroup className="solo rail-btn"><IconBtn name="more" label="Brush settings" onClick={() => setSheet('ink')} /></PillGroup>
           </>
@@ -542,29 +543,14 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
       </div>
 
       <div className="bottom-stack">
-        {!drawing && pages.length > 0 && (
-          <div className="page-strip hscroll" role="tablist" aria-label="Pages">
-            {(['front', 'back'] as Side[]).map(side => groups[side].length > 0 && (
-              <div key={side} className="ps-group">
-                <span className="ps-label">{side === 'front' ? 'Front' : 'Back'}</span>
-                {groups[side].map(p => {
-                  const on = face?.panel === p.panel && face?.side === p.side
-                  const src = thumbs[`${p.panel}:${p.side}`]
-                  return (
-                    <button key={`${p.panel}:${p.side}`} role="tab" aria-selected={on} className={`ps ${on ? 'on' : ''}`} onClick={() => focusPage(p.panel, p.side)}>
-                      {src ? <img src={src} alt="" /> : <span className="ps-ph" />}
-                      <span className="ps-n">{p.n}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
+        {/* the folds' keyframes: tap one to fold the zine into that pose and work on what it shows */}
+        {doc.keyframes.length > 1 && !drawing && (
+          <KeyframeStrip doc={doc} active={Math.round(kfT)} onPick={goKeyframe} readOnly dither />
         )}
         {doc.keyframes.length > 1 && !drawing && (
           <Ruler value={kfT} count={doc.keyframes.length}
             onChange={t => { setKfT(t); scene?.setAngles(scene.poseAt(t), { animate: false }) }}
-            onRelease={i => { setKfT(i); scene?.setAngles(doc.keyframes[i].angles, { feel: FEELS[doc.transition.feel] }); setTimeout(() => { const f = scene?.nearestFace(); if (f && scene) { scene.facePanel(f.panel, f.side, { focus: true }); setFace(f) } }, 450) }} />
+            onRelease={goKeyframe} />
         )}
         {colorOpen && drawing && (
           <div className="ink-colors hscroll">
@@ -574,36 +560,11 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
             <label className="sw spectrum" aria-label="Custom colour"><input type="color" value={ink.color} onChange={e => ed.setInk({ color: e.target.value })} /></label>
           </div>
         )}
-        <div className="toolbar collage-bar" role="toolbar" aria-label="Collage tools">
-          <div className="ink-tray">
-            {INK_TOOLS.map(t => {
-              const on = drawing && ink.tool === t.id
-              return (
-                <button key={t.id} className={`ink-tool ${on ? 'on' : ''}`} aria-label={t.label} aria-pressed={on} onClick={() => startDraw(t.id)}>
-                  <DitherImg src={t.src} color={on ? '#FF4934' : '#5E5E5E'} size={t.h} scale={1} style={{ height: t.h }} />
-                </button>
-              )
-            })}
-          </div>
-          <span className="tb-sep" />
-          {drawing ? (
-            <>
-              <button className="ink-swatch" aria-label="Ink colour" style={{ '--sw': ink.color } as CSSProperties} onClick={() => setColorOpen(o => !o)}><span /></button>
-              <button className="ink-preview" aria-label="Brush settings" onClick={() => setSheet('ink')}>
-                <svg viewBox="0 0 60 24" width={60} height={24}><path d="M4 16c10-10 18 6 28-2s16-6 24-8" fill="none" stroke={ink.tool === 'eraser' ? '#ccc' : ink.color} strokeWidth={Math.max(1.5, ink.size[ink.tool] * 14)} strokeLinecap="round" opacity={ink.tool === 'marker' ? 0.6 : ink.opacity} /></svg>
-                <span>{ink.boil ? 'boiling' : ink.tool}</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="tool-glyph" aria-label="Add scraps" onClick={() => setSheet('scrap')}><Icon name="image" size={23} /></button>
-              <button className="tool-glyph" aria-label="Layers" onClick={() => setSheet('layers')}><Icon name="layers" size={23} /></button>
-              <button className="tool-glyph" aria-label="Add text" onClick={() => { haptic('tap'); setText({ open: true, initial: null }) }}><Icon name="text" size={23} /></button>
-              <button className="tool-glyph" aria-label="More tools" onClick={() => setSheet('more')}><Icon name="grid" size={23} /></button>
-            </>
-          )}
-        </div>
       </div>
+
+      <CollageTray drawing={drawing} tool={ink.tool} onTool={startDraw}
+        onMore={() => setSheet('more')} onLayers={() => setSheet('layers')} onText={() => { haptic('tap'); setText({ open: true, initial: null }) }}
+        color={ink.color} onColor={() => setColorOpen(o => !o)} onBrush={() => setSheet('ink')} brushLabel={ink.boil ? 'boiling' : ink.tool} />
 
       {spread && scene && (
         <SpreadView scene={scene} doc={doc} onClose={() => setSpread(false)}
@@ -611,7 +572,8 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
           onMove={(objects, label) => commit({ ...docRef.current, objects }, label)} />
       )}
 
-      <ScrapSheet open={sheet === 'scrap'} onClose={() => setSheet('none')} onAdd={addScraps} />
+      <ScrapTab onPull={setScrapPull} onOpen={() => { setSheet('scrap'); setScrapPull(null) }} />
+      <ScrapSheet open={sheet === 'scrap'} onClose={() => setSheet('none')} onAdd={addScraps} pull={scrapPull} />
       <MusicPicker open={sheet === 'music'} onClose={() => setSheet('none')} value={doc.music}
         onChange={m => { commit({ ...docRef.current, music: m }, m ? 'Soundtrack' : 'Remove soundtrack') }} />
       <EffectsSheet open={sheet === 'effects'} effects={doc.effects} scopes={effectScopes}
@@ -664,8 +626,8 @@ export default function Collage({ scene, doc, active, exit, next }: StepProps) {
 
       <Sheet open={sheet === 'more'} onClose={() => setSheet('none')} title="Collage" dim>
         <div className="more-grid">
-          <button onClick={() => setSheet('effects')}><Icon name="sparkle" size={22} /><span>Effects</span></button>
           <button onClick={() => setSheet('scrap')}><Icon name="image" size={22} /><span>Scraps</span></button>
+          <button onClick={() => setSheet('effects')}><Icon name="sparkle" size={22} /><span>Effects</span></button>
           <button onClick={() => setSheet('music')}><Icon name="music" size={22} /><span>Music</span></button>
           <button onClick={() => setSheet('bg')}><Icon name="palette" size={22} /><span>Background</span></button>
           <button onClick={() => { setSheet('none'); setSpread(true) }}><Icon name="spread" size={22} /><span>Spread</span></button>

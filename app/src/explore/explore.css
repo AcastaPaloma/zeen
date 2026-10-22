@@ -1,0 +1,120 @@
+/* ---------------------------------------------------------------- switch beside the mockup */
+
+.explore-switch { display: none; }
+@media (min-width: 600px) {
+  .explore-switch {
+    display: flex; flex-direction: column; gap: 8px;
+    position: fixed; left: 16px; top: 16px; z-index: 5;
+    width: 132px;
+    font-family: var(--ui);
+  }
+  /* squeezed in the corner, just the buttons and their names */
+  .explore-switch .xs-btn span { display: none; }
+  .explore-switch .xs-btn b { font-size: 12px; }
+}
+/* with room beside the phone, it sits right next to it, with what each one is */
+@media (min-width: 1000px) {
+  .explore-switch { position: absolute; left: calc(100% + 40px); top: 50%; transform: translateY(-50%); width: 220px; }
+  .explore-switch .xs-btn small, .explore-switch .xs-btn span { display: block; }
+  .explore-switch .xs-btn b { font-size: 14px; }
+}
+.explore-switch h2 { margin: 10px 0 0 4px; font-size: 13px; font-weight: 600; color: var(--mute); }
+.xs-group { display: flex; flex-direction: column; gap: 8px; }
+.xs-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 12px 14px; border-radius: 13px; text-align: left;
+  background: #F4F4F4; color: var(--ink);
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast) var(--ease-spring);
+}
+.xs-btn:hover { background: #ECECEC; }
+.xs-btn:active { transform: scale(0.97); }
+.xs-btn b { font-size: 14px; font-weight: 600; }
+.xs-btn small { font-size: 12px; color: var(--mute); }
+.xs-btn span { margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--mute); }
+.xs-btn.on { background: var(--ink); color: #fff; }
+.xs-btn.on small, .xs-btn.on span { color: rgba(255, 255, 255, 0.7); }
+/* only the one showing explains itself, so the whole list fits beside the phone */
+.explore-switch .xs-btn:not(.on) span { display: none; }
+
+/* ---------------------------------------------------------------- the exploration screens */
+
+.explore-layer { position: absolute; inset: 0; z-index: 80; animation: fade-in 200ms ease both; }
+.explore { position: absolute; inset: 0; overflow: hidden; }
+/* the paper's box: anything pinned to the paper (dots, menus) is measured from its top-left too */
+.ex-stage, .ex-orbs, .ex-pop { position: absolute; left: 0; right: 0; top: calc(var(--safe-top) + 56px); }
+.ex-reset { height: 36px; background: var(--panel); box-shadow: var(--shadow-1); }
+
+/* 1 · measured: everything happens in a panel of controls under the paper */
+.ex-panel {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 16px 18px calc(var(--safe-bottom) + 16px);
+  background: var(--panel);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.08);
+}
+.ex-row { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.ex-row > span { font-size: 13px; color: var(--mute); width: 74px; flex: none; }
+.ex-row .segmented { flex: 1; }
+.ex-panel .slider-val { width: 52px; }
+.ex-go { margin-top: 6px; width: 100%; }
+
+/* 2 · dot to dot: glowing dots (the reader's fold orbs) that you place on the paper's edge, and a Cut / Fold menu */
+.ex-orbs { bottom: 0; pointer-events: none; z-index: 5; }
+.ex-orbs .ex-orb { pointer-events: none; }
+.explore:has(.ex-orbs.on-edge) canvas { cursor: pointer; }
+.ex-pop { right: auto; z-index: 6; width: 0; height: 0; }
+.ex-pop-card {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 4px; padding: 4px;
+  background: var(--panel); border-radius: 13px; box-shadow: var(--shadow-2);
+  animation: pop-in 220ms var(--ease-spring) both;
+}
+.ex-pop-card > button:not(.icon-btn) { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 14px; font-weight: 600; color: #fff; }
+.ex-cut { background: var(--accent); }
+.ex-fold { background: var(--fold); }
+.ex-pop-card .icon-btn { width: 36px; height: 36px; }
+.ex-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 40px); animation: fade-up var(--t-med) var(--ease-out) both; }
+
+/* ---------------------------------------------------------------- reading explorations */
+
+.ex-chip {
+  height: 30px; padding: 0 12px; border-radius: 13px;
+  background: rgba(255, 255, 255, 0.92); box-shadow: var(--shadow-1);
+  display: grid; place-items: center; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* the zine's own paper, rendered out of sight so its pages can be cut out of it */
+.ex-offscreen { position: absolute; left: 0; top: 0; width: 320px; height: 420px; visibility: hidden; pointer-events: none; }
+
+/* 1 · page by page: a carousel of flat pages */
+.ex-pages {
+  position: absolute; left: 0; right: 0; top: calc(var(--safe-top) + 60px); bottom: calc(var(--safe-bottom) + 84px);
+  display: flex; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.ex-pages::-webkit-scrollbar { display: none; }
+.ex-page { flex: 0 0 100%; scroll-snap-align: center; display: grid; place-items: center; padding: 20px 28px; box-sizing: border-box; min-width: 0; }
+.ex-page img {
+  max-width: 100%; max-height: 100%; display: block; object-fit: contain;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.14)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1));
+}
+.ex-pager {
+  position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 22px);
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+}
+.ex-pips { display: flex; gap: 6px; }
+.ex-pips span { width: 6px; height: 6px; border-radius: 3px; background: #CFCFCF; transition: width var(--t-fast) var(--ease-out), background var(--t-fast); }
+.ex-pips span.on { width: 16px; background: var(--ink); }
+
+/* 2 · tap through: story bars over the zine, and the whole screen as tap zones */
+.ex-stage-full { top: 0; bottom: 0; }
+.ex-taps { position: absolute; inset: 0; z-index: 4; touch-action: none; cursor: pointer; }
+.ex-read .top-bar { padding-top: calc(var(--safe-top) + 16px); }
+.ex-bars { position: absolute; left: 14px; right: 14px; top: calc(var(--safe-top) + 6px); z-index: 21; display: flex; gap: 4px; pointer-events: none; }
+.ex-bar { flex: 1; height: 3px; border-radius: 2px; background: rgba(26, 26, 26, 0.14); overflow: hidden; }
+.ex-bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 2px; }
+.ex-bar i.done { width: 100%; }
+.ex-bar i.run { animation: ex-fill linear forwards; }
+.ex-bar i.run.paused { animation-play-state: paused; }
+@keyframes ex-fill { from { width: 0; } to { width: 100%; } }
+.ex-read .ex-hint { font-size: 16px; }

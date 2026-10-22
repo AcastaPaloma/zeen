@@ -5,10 +5,14 @@
   position: relative;
   width: 100%;
   transform: rotate(var(--tilt));
-  transition: transform var(--t-med) var(--ease-spring), filter var(--t-fast);
+  transition: transform var(--t-med) var(--ease-spring), filter var(--t-fast), opacity var(--t-med) ease;
   display: block;
 }
 .zcard:active { transform: rotate(var(--tilt)) scale(0.95); }
+/* on Home the cards sit a little smaller in their columns, with a touch more air around them */
+.home-feed .zcard { width: 95%; }
+/* while its zine is out in the preview, the card's slot stays empty (Preview) */
+.zcard.pv-hole { visibility: hidden; }
 .zcard img {
   width: 100%;
   display: block;
@@ -22,7 +26,7 @@
   z-index: 2;
   height: 22px;
   padding: 0 10px;
-  border-radius: 12px;
+  border-radius: 13px;
   background: #fff;
   color: var(--tag, #F158A7);
   font-size: 11px;
@@ -36,7 +40,7 @@
 .zcard-badge {
   position: absolute; top: 6px; left: 6px;
   display: inline-flex; align-items: center; gap: 3px;
-  height: 20px; padding: 0 7px; border-radius: 10px;
+  height: 20px; padding: 0 7px; border-radius: 13px;
   background: rgba(26, 26, 26, 0.85); color: #fff; font-size: 10px; font-weight: 500;
 }
 .zcard-badge.pin { background: var(--accent); padding: 0 5px; }

@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { trackById } from '../lib/assets'
 import { haptic, isMuted, setMuted, sfx } from '../lib/feedback'
 import { music } from '../lib/music'
 import { ME } from '../lib/samples'
 import { removeShelf, useApp, type Shelf } from '../lib/store'
 import { useThumb } from '../lib/thumbs'
 import type { User, ZineDoc } from '../lib/types'
-import { BottomNav } from '../ui/BottomNav'
 import { Icon, type IconName } from '../ui/Icon'
-import { Button, fmtCount, Sheet } from '../ui/kit'
-import { ZineView } from '../ui/ZineView'
+import { Button, fmtCount, Sheet, useSwipe } from '../ui/kit'
 import { openZine, SocTabs } from './Community'
 import { MessyGrid } from './ZineGrid'
 import './social.css'
@@ -33,44 +30,9 @@ export function HeaderStickers({ stickers }: { stickers: User['stickers'] }) {
   )
 }
 
-export function useMusicState() {
-  const [st, setSt] = useState(music.state)
-  useEffect(() => music.subscribe(setSt), [])
-  return st
-}
-
-export function SongChip({ track }: { track?: string }) {
-  const t = trackById(track)
-  const st = useMusicState()
-  if (!t || !track) return null
-  const playing = st.playing && st.track === track
-  return (
-    <button className="song-chip" onClick={() => { haptic('tick'); music.toggle(track) }} aria-label={`${playing ? 'Pause' : 'Play'} ${t.track.title}`}>
-      <img src={t.album.cover} alt="" className={playing ? 'spin' : ''} />
-      <span>
-        <div className="sc-t">{t.track.title}</div>
-        <div className="sc-a">{t.album.artist}</div>
-      </span>
-      <Icon name={playing ? 'pause' : 'play'} size={16} />
-    </button>
-  )
-}
-
 function MiniThumb({ z, onClick }: { z: ZineDoc; onClick?: () => void }) {
   const src = useThumb(z)
   return src ? <img src={src} alt={z.publish.title} onClick={onClick} /> : null
-}
-
-/** The maker's profile zine, unfolding in place. */
-function ProfileZine({ z }: { z: ZineDoc }) {
-  const go = useApp(s => s.go)
-  return (
-    <div className="pf-zine">
-      <span className="pf-zine-cap">Profile zine · drag the light</span>
-      <button className="icon-btn pf-zine-open" aria-label="Read profile zine" onClick={() => go({ name: 'read', id: z.id })}><Icon name="expand" size={18} /></button>
-      <ZineView doc={z} mode="page" shadow onScene={s => { if (s) { s.fitMargin = 1.5; s.bgParallax = false } }} />
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------- shelf
@@ -215,7 +177,6 @@ function Shelves({ editable }: { editable: boolean }) {
             })}
             {!sh.zines.length && <span className="muted" style={{ fontSize: 12, alignSelf: 'center', paddingBottom: 30 }}>Drop zines here</span>}
           </div>
-          <div className="shelf-plank" />
         </section>
       ))}
       {editable && (
@@ -238,7 +199,8 @@ function MenuItem({ icon, label, onClick, danger }: { icon: IconName; label: str
   return <button className={`menu-item ${danger ? 'danger' : ''}`} onClick={onClick}><Icon name={icon} size={20} /> {label}</button>
 }
 
-export default function Profile({ id }: { active: boolean; id?: string }) {
+/** A maker's profile. Your own lives as the last page of home's pager (`embedded`); others' open on top. */
+export default function Profile({ id, embedded = false, active }: { active: boolean; id?: string; embedded?: boolean }) {
   const meUser = useApp(s => s.me)
   const users = useApp(s => s.users)
   const zines = useApp(s => s.zines)
@@ -256,6 +218,29 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
   const [pinMode, setPinMode] = useState(false)
   const [scrollY, setScrollY] = useState(0)
   const [muted, setM] = useState(isMuted())
+  // the header pulls down to reveal the whole profile image, and pushes back up to tuck it away
+  const scroller = useRef<HTMLDivElement>(null)
+  const [hdrH, setHdrH] = useState<number | null>(null)
+  const hd = useRef<{ y0: number; h0: number; s0: number; y: number; t: number; v: number; moved: boolean; small: number; big: number } | null>(null)
+  const dragged = useRef(false)
+  const landing = useApp(s => s.publishLanding)
+  const [prevLanding, setPrevLanding] = useState(landing)
+  // Reset the destination in the same render, before the flight measures its card.
+  if (landing && landing !== prevLanding && isMe && active) {
+    setPrevLanding(landing)
+    setTab('own')
+    setExpanded(false)
+    setHdrH(null)
+    setMenu(false)
+    setPinMode(false)
+  }
+
+  // swipe right to leave a profile opened on top (home's pager handles the sideways drag for your own)
+  const swipe = useSwipe(dir => {
+    if (dir !== 'right' || embedded) return
+    haptic('tick')
+    back()
+  })
 
   const own = useMemo(() => Object.values(zines).filter(z => user && z.author === user.id && z.status === 'published')
     .sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)), [zines, user])
@@ -264,10 +249,47 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
 
   const pins = isMe ? pinned.map(p => zines[p]).filter((z): z is ZineDoc => !!z && z.author === ME) : own.slice(0, 1)
   const rest = own.filter(z => !pins.includes(z))
-  const profileZine = (user.headerZine && zines[user.headerZine]) || pins[0] || own[0]
   const isFollowing = following.includes(user.id)
   const followers = user.followers + (isFollowing && !isMe ? 1 : 0)
   const hdr = user.header || '#222'
+
+  const hdrBind = {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if ((e.target as Element).closest('.pf-corner')) return
+      const el = e.currentTarget
+      try { el.setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+      const safe = parseFloat(getComputedStyle(el).getPropertyValue('--safe-top')) || 0
+      hd.current = {
+        y0: e.clientY, h0: el.offsetHeight, s0: scroller.current?.scrollTop ?? 0, y: e.clientY, t: performance.now(), v: 0, moved: false,
+        small: 150 + safe, big: Math.min(window.innerHeight * 0.76, 640),
+      }
+      dragged.current = false
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const d = hd.current
+      if (!d) return
+      const now = performance.now()
+      d.v = d.v * 0.6 + ((e.clientY - d.y) / Math.max(1, now - d.t)) * 0.4
+      d.y = e.clientY; d.t = now
+      const dy = e.clientY - d.y0
+      if (!d.moved && Math.abs(dy) < 5) return
+      d.moved = true
+      dragged.current = true
+      // scrolled down, or pushing a closed header up: it's just the page scrolling
+      if (d.s0 > 0 || (!expanded && dy < 0)) { if (scroller.current) scroller.current.scrollTop = d.s0 - dy; return }
+      const h = d.h0 + dy
+      setHdrH(h > d.big ? d.big + Math.sqrt(h - d.big) * 4 : Math.max(d.small * 0.9, h))
+    },
+    onPointerUp: () => {
+      const d = hd.current
+      hd.current = null
+      if (!d || hdrH === null) { setHdrH(null); return }
+      const open = hdrH + d.v * 160 > (d.small + d.big) / 2
+      if (open !== expanded) haptic('tick')
+      setExpanded(open)
+      setHdrH(null)
+    },
+  }
 
   const onOpen = (z: ZineDoc, rect: DOMRect) => {
     if (pinMode) {
@@ -280,14 +302,17 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
   }
 
   return (
-    <div className="pf">
-      <div className="pf-scroll" onScroll={e => {
+    <div className="pf" data-own-work={isMe && tab === 'own' ? '' : undefined}>
+      <div className="pf-scroll" ref={scroller} {...(embedded ? {} : swipe)} onScroll={e => {
         const y = (e.target as HTMLElement).scrollTop
         setScrollY(y)
         if (expanded && y > 60) setExpanded(false)
       }}>
-        <header className={`pf-header ${expanded ? 'expanded' : ''}`} style={{ '--hdr': isColor(hdr) ? hdr : '#222' } as CSSProperties}
-          onClick={() => { haptic('tick'); setExpanded(x => !x) }} aria-expanded={expanded} aria-label={`${user.name}'s profile header. Tap to ${expanded ? 'collapse' : 'expand'}`}>
+        <header className={`pf-header ${expanded ? 'expanded' : ''}`}
+          style={{ '--hdr': isColor(hdr) ? hdr : '#222', ...(hdrH !== null ? { height: hdrH, transition: 'none' } : {}) } as CSSProperties}
+          {...hdrBind}
+          onClick={() => { if (dragged.current) { dragged.current = false; return } haptic('tick'); setExpanded(x => !x) }}
+          aria-expanded={expanded} aria-label={`${user.name}'s profile header. Drag down or tap to ${expanded ? 'collapse' : 'expand'}`}>
           <HeaderBg header={hdr} />
           <HeaderStickers stickers={user.stickers} />
           <div className="pf-corner l" onClick={e => e.stopPropagation()}>
@@ -320,12 +345,6 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
             : <Button kind="dark" className={isFollowing ? 'following' : ''} icon={isFollowing ? 'check' : 'users'}
                 onClick={() => { toggleFollow(user.id); haptic('tap'); if (!isFollowing) sfx('pop') }}>{isFollowing ? 'Following' : 'Follow'}</Button>}
         </div>
-        <div className="pf-extras">
-          <SongChip track={user.song} />
-          {(user.links ?? []).map(l => <span key={l} className="link-chip"><Icon name="link" size={13} />{l}</span>)}
-        </div>
-
-        {profileZine && <ProfileZine z={profileZine} />}
 
         <SocTabs value={tab} onChange={setTab} options={[{ value: 'own', label: 'Own Work' }, { value: 'collection', label: isMe ? 'Collected' : 'Collected' }]} />
 
@@ -356,8 +375,12 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
             )}
             {pinMode && <p className="pin-mode-note">Tap zines to pin or unpin (up to 3).</p>}
             {pins.length > 0 && <MessyGrid zines={pins} onOpen={onOpen} scrollY={scrollY} badges={() => 'pin'} />}
-            {pins.length > 0 && rest.length > 0 && <div style={{ height: 34 }} />}
-            {rest.length > 0 && <MessyGrid zines={rest} onOpen={onOpen} scrollY={scrollY} badges={z => (z.publish.replyTo ? 'reply' : undefined)} />}
+            {rest.length > 0 && (
+              <section className="pf-zines" aria-label="Zines">
+                <div className="pf-section"><h4>Zines</h4></div>
+                <MessyGrid zines={rest} onOpen={onOpen} scrollY={scrollY} badges={z => (z.publish.replyTo ? 'reply' : undefined)} />
+              </section>
+            )}
             {!own.length && (
               <div className="empty-note">{isMe ? 'Nothing published yet. Your first zine is one fold away.' : `${user.name} hasn't published yet.`}
                 {isMe && <><br /><Button icon="plus" onClick={() => go({ name: 'create' })}>Make a zine</Button></>}
@@ -370,7 +393,6 @@ export default function Profile({ id }: { active: boolean; id?: string }) {
           : <div className="empty-note">{user.name}'s shelf is private.</div>)}
       </div>
 
-      <BottomNav current={isMe ? 'profile' : 'home'} search={false} />
 
       <Sheet open={menu} onClose={() => setMenu(false)} dim>
         <div className="menu-list">

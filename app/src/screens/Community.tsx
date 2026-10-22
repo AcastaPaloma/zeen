@@ -4,9 +4,9 @@ import { ME } from '../lib/samples'
 import { addCommunityPost, published, useApp } from '../lib/store'
 import { useThumb } from '../lib/thumbs'
 import type { Post, ZineDoc } from '../lib/types'
-import { BottomNav } from '../ui/BottomNav'
 import { Icon } from '../ui/Icon'
 import { Avatar, Button, fmtCount, Sheet, timeAgo } from '../ui/kit'
+import { CommunityTitle } from '../ui/Ransom'
 import { MessyGrid, ZineCard } from './ZineGrid'
 import './social.css'
 
@@ -174,7 +174,7 @@ export default function CommunityScreen({ id }: { active: boolean; id?: string }
             ))}
           </div>
           <div className="cm-tag">#{c.tag}</div>
-          <h1 className="cm-title">{c.name}</h1>
+          <CommunityTitle c={c} text={c.name} className="cm-title" />
           <div className="cm-stats">{fmtCount(members)} members · {c.perMonth} zines this month</div>
           <p className="cm-desc">{c.description}</p>
           <div className="cm-join">
@@ -191,7 +191,7 @@ export default function CommunityScreen({ id }: { active: boolean; id?: string }
         <button className="cm-prompt" style={{ '--pc': c.color } as CSSProperties} onClick={() => go({ name: 'prompt', id: c.id })}>
           <div style={{ flex: 1 }}>
             <div className="cmp-k">This week's prompt</div>
-            <div className="cmp-t">{c.prompt.title}</div>
+            <CommunityTitle c={c} text={c.prompt.title} className="cmp-t" as="div" />
             <div className="cmp-b">{c.prompt.body}</div>
           </div>
           <span className="cmp-due">due {c.prompt.due}</span>
@@ -233,7 +233,6 @@ export default function CommunityScreen({ id }: { active: boolean; id?: string }
           </div>
         )}
       </div>
-      <BottomNav current="home" />
     </div>
   )
 }

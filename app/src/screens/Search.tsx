@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { trackById } from '../lib/assets'
 import { published, useApp } from '../lib/store'
 import { useThumb } from '../lib/thumbs'
@@ -26,6 +27,7 @@ function ZineRow({ z, onOpen }: { z: ZineDoc; onOpen: (z: ZineDoc) => void }) {
 export default function Search() {
   const open = useApp(s => s.searchOpen)
   const setOpen = useApp(s => s.setSearchOpen)
+  const from = useApp(s => s.searchFrom)
   const zines = useApp(s => s.zines)
   const users = useApp(s => s.users)
   const communities = useApp(s => s.communities)
@@ -36,7 +38,8 @@ export default function Search() {
   const input = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (open) { const t = setTimeout(() => input.current?.focus(), 320); return () => clearTimeout(t) }
+    if (open) { const t = setTimeout(() => input.current?.focus({ preventScroll: true }), 360); return () => clearTimeout(t) }
+    input.current?.blur()
     setQ('')
   }, [open])
 
@@ -63,12 +66,17 @@ export default function Search() {
   }, [s, all, users, communities])
 
   const close = () => setOpen(false)
+  // leaving for another screen: slide away rather than fold back into the home field, which is going too
+  const leave = () => setOpen(false, null)
   const commit = () => addRecent(q.trim())
-  const openZine = (z: ZineDoc) => { commit(); close(); go({ name: 'preview', id: z.id, from: null }) }
+  const openZine = (z: ZineDoc) => { commit(); leave(); go({ name: 'preview', id: z.id, from: null }) }
   const empty = res && !res.zines.length && !res.makers.length && !res.communities.length && !res.tags.length && !res.songs.length
 
-  return (
-    <Sheet open={open} onClose={close} height="full" dim className="search-sheet"
+  // the sheet lives on the device, above the bottom nav, so its field can sit right on the nav's and grow out of it
+  const host = document.querySelector('.device')
+  if (!host) return null
+  return createPortal(
+    <Sheet open={open} onClose={close} height="full" dim className="search-sheet" from={from} keep
       header={
         <form className="search-field" onSubmit={e => { e.preventDefault(); commit(); input.current?.blur() }}>
           <Icon name="search" size={18} />
@@ -86,7 +94,7 @@ export default function Search() {
           <div className="chip-wrap">{trending.map(t => <Chip key={t} onClick={() => setQ('#' + t)}>#{t}</Chip>)}</div>
           <h5>Communities</h5>
           {communities.map(c => (
-            <button key={c.id} className="sr-row" onClick={() => { close(); go({ name: 'community', id: c.id }) }}>
+            <button key={c.id} className="sr-row" onClick={() => { leave(); go({ name: 'community', id: c.id }) }}>
               <span className="sr-badge" style={{ background: c.color }}>#</span>
               <span className="sr-text"><b>{c.name}</b><small>{fmtCount(c.members)} members · {c.perMonth} zines this month</small></span>
               <Icon name="right" size={16} />
@@ -100,14 +108,14 @@ export default function Search() {
           {res.tags.length > 0 && <div className="chip-wrap">{res.tags.map(t => <Chip key={t} onClick={() => setQ('#' + t)}>#{t}</Chip>)}</div>}
           {res.zines.length > 0 && (<><h5>Zines</h5>{res.zines.map(z => <ZineRow key={z.id} z={z} onOpen={openZine} />)}</>)}
           {res.makers.length > 0 && (<><h5>Makers</h5>{res.makers.map(u => (
-            <button key={u.id} className="sr-row" onClick={() => { commit(); close(); go({ name: 'profile', id: u.id }) }}>
+            <button key={u.id} className="sr-row" onClick={() => { commit(); leave(); go({ name: 'profile', id: u.id }) }}>
               <Avatar src={u.avatar} size={40} />
               <span className="sr-text"><b>{u.name}</b><small>@{u.handle} · {fmtCount(u.followers)} readers</small></span>
               <Icon name="right" size={16} />
             </button>
           ))}</>)}
           {res.communities.length > 0 && (<><h5>Communities</h5>{res.communities.map(c => (
-            <button key={c.id} className="sr-row" onClick={() => { commit(); close(); go({ name: 'community', id: c.id }) }}>
+            <button key={c.id} className="sr-row" onClick={() => { commit(); leave(); go({ name: 'community', id: c.id }) }}>
               <span className="sr-badge" style={{ background: c.color }}>#</span>
               <span className="sr-text"><b>{c.name}</b><small>#{c.tag} · {fmtCount(c.members)} members</small></span>
               <Icon name="right" size={16} />
@@ -122,6 +130,7 @@ export default function Search() {
           ))}</>)}
         </div>
       )}
-    </Sheet>
+    </Sheet>,
+    host,
   )
 }

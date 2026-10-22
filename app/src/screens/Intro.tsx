@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
+import { BRAND } from '../lib/assets'
+import { asset } from '../lib/base'
 import { haptic, sfx } from '../lib/feedback'
 import { uid } from '../lib/geom'
 import { newDoc } from '../lib/paper'
@@ -28,24 +30,24 @@ function introDoc(): ZineDoc {
   const cx = (i: number) => i * pw + pw / 2
   d.objects = [
     // cover: the left door's back
-    text('Zeen', 'back', cx(2), ph * 0.36, 3.4, 'script', '#1A1A1A', { rot: -0.06 }),
+    { ...sticker(BRAND.logo, 'back', cx(2), ph * 0.34, pw * 0.72, (pw * 0.72 * 480) / 1313, -0.04), name: 'Zeen', sticker: 0, shadow: false },
     text('a zine about\nmaking zines', 'back', cx(2), ph * 0.58, 0.8, 'typewriter', '#555'),
     text('drag the light →', 'back', cx(2), ph * 0.86, 0.75, 'marker', '#FF4934', { rot: 0.03 }),
     // revealed when the left door opens
     text('1', 'front', cx(0), ph * 0.18, 2.4, 'grotesk', '#FF4934'),
     text('Make zines\nthat move.', 'front', cx(0), ph * 0.42, 1.25, 'grotesk', '#1A1A1A'),
     text('ink that boils, stickers\nthat wiggle, a soundtrack.', 'front', cx(0), ph * 0.62, 0.55, 'typewriter', '#555'),
-    sticker('/assets/scraps/hamster-drums.webp', 'front', cx(0), ph * 0.82, 4, 4, -0.08),
+    sticker(asset('/assets/scraps/hamster-drums.webp'), 'front', cx(0), ph * 0.82, 4, 4, -0.08),
     // the right door's back, seen next
     text('2', 'back', cx(0), ph * 0.18, 2.4, 'grotesk', '#245AE2'),
     text('Fold, cut,\ncollage.', 'back', cx(0), ph * 0.42, 1.25, 'grotesk', '#1A1A1A'),
     text('real paper physics,\nmade for your thumb.', 'back', cx(0), ph * 0.62, 0.55, 'typewriter', '#555'),
-    sticker('/assets/scraps/bird-blue.webp', 'back', cx(0), ph * 0.82, 3.6, 4.2, 0.1),
+    sticker(asset('/assets/scraps/bird-blue.webp'), 'back', cx(0), ph * 0.82, 3.6, 4.2, 0.1),
     // fully open: centre + right panel fronts
     text('3', 'front', cx(1), ph * 0.18, 2.4, 'grotesk', '#4BA334'),
     text('Share with\nyour scene.', 'front', cx(1), ph * 0.42, 1.25, 'grotesk', '#1A1A1A'),
     text('communities, reply zines,\na shelf of your favourites.', 'front', cx(1), ph * 0.62, 0.55, 'typewriter', '#555'),
-    sticker('/assets/stickers/glitter-heart.webp', 'front', cx(1), ph * 0.83, 3.2, 3.2, -0.2),
+    sticker(asset('/assets/stickers/glitter-heart.webp'), 'front', cx(1), ph * 0.83, 3.2, 3.2, -0.2),
     text('ready?', 'front', cx(2), ph * 0.4, 2.2, 'script', '#FF4934', { rot: -0.08 }),
     text('make one\ntonight', 'front', cx(2), ph * 0.66, 1.1, 'ransom', '#111'),
   ]
@@ -103,7 +105,7 @@ export default function Intro(_: { active: boolean }) {
     <div className="intro dots">
       <ZineView doc={doc} mode="page" onScene={onScene} keepAngles />
       <div className="intro-top">
-        <span className="intro-logo">Zeen</span>
+        <img className="intro-logo" src={BRAND.logo} alt="Zeen" draggable={false} />
         <button className="intro-skip" onClick={finish}>Skip</button>
       </div>
       <div className="intro-bottom">

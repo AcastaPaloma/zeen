@@ -7,7 +7,7 @@ import { pageToFlat, panelMatrices } from '../lib/paper'
 import type { EdgeStyle, EffectType, Side, Vec2, ZineDoc } from '../lib/types'
 import type { PageRef, ZineScene } from '../three/ZineScene'
 import { Icon, type IconName } from '../ui/Icon'
-import { IconBtn, PillGroup, Row, Segmented, Slider, Toggle } from '../ui/kit'
+import { Grabber, IconBtn, PillGroup, Row, Slider, Toggle, usePanelDrag } from '../ui/kit'
 import type { StepProps } from './Create'
 import { useEditor } from './editor'
 import './finish.css'
@@ -92,24 +92,28 @@ export function checkZine(scene: ZineScene | null, doc: ZineDoc): Flag[] {
 export default function Finalize({ scene, doc, exit, next }: StepProps) {
   const ed = useEditor()
   const [tab, setTab] = useState<Tab>('edges')
-  const [playing, setPlaying] = useState(true)
   const [previews, setPreviews] = useState<Record<string, string>>({})
   const [warned, setWarned] = useState(false)
   const paused = useRef(false)
   const f = doc.finalize
 
-  // the zine sits in the top part of the screen while the sheet takes the bottom
+  // the panel drags taller or shorter; the zine takes whatever space is left above it
+  const panel = usePanelDrag([0.3, 0.55, 0.8], 0.55)
   useEffect(() => {
     if (!scene) return
     const el = scene.el
     el.style.top = 'calc(var(--safe-top) + 84px)'
-    el.style.bottom = '47%'
+    el.style.bottom = `${Math.round((1 - panel.top) * 100) + 2}%`
     scene.fitMargin = 1.4
     scene.resize()
+  }, [scene, panel.top])
+  useEffect(() => {
+    if (!scene) return
+    const el = scene.el
     return () => { el.style.top = ''; el.style.bottom = ''; scene.fitMargin = null; scene.resize(); scene.tiltX.to(0); scene.tiltY.to(0) }
   }, [scene])
 
-  // unfold sequence on loop, with holds on each keyframe; breathe sways the paper gently
+  // the unfold always loops, with holds on each keyframe; breathe sways the paper gently
   useEffect(() => {
     if (!scene) return
     const n = doc.keyframes.length
@@ -123,7 +127,7 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
         scene.tiltY.to(Math.sin(now / 1250) * 0.07)
         scene.tiltX.to(Math.cos(now / 1600) * 0.035)
       }
-      if (!playing || paused.current || n < 2) return
+      if (paused.current || n < 2) return
       t = (t + dt) % cycle
       // ping-pong across the keyframes
       const half = cycle / 2
@@ -143,7 +147,7 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
     let resume = 0
     const off2 = scene.on('handle-up', () => { clearTimeout(resume); resume = window.setTimeout(() => { paused.current = false }, 2500) })
     return () => { cancelAnimationFrame(raf); off1(); off2(); clearTimeout(resume) }
-  }, [scene, doc.keyframes, playing, f.breathe])
+  }, [scene, doc.keyframes, f.breathe])
 
   useEffect(() => {
     if (!scene || f.breathe) return
@@ -197,19 +201,6 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
     if (commit) ed.commit(nd, 'Effect amount'); else ed.live(nd)
   }
 
-  const previewIntro = () => {
-    if (!scene) return
-    haptic('tap')
-    const el = scene.el
-    const kf: Keyframe[] = f.intro === 'drop'
-      ? [{ transform: 'translateY(-110%) rotate(-8deg)', opacity: 0 }, { transform: 'translateY(4%) rotate(1deg)', opacity: 1, offset: 0.7 }, { transform: 'none', opacity: 1 }]
-      : f.intro === 'slide'
-        ? [{ transform: 'translateX(110%) rotate(6deg)', opacity: 0 }, { transform: 'translateX(-3%)', opacity: 1, offset: 0.75 }, { transform: 'none', opacity: 1 }]
-        : [{ transform: 'perspective(900px) rotateY(180deg) scale(0.8)', opacity: 0 }, { transform: 'perspective(900px) rotateY(-12deg)', opacity: 1, offset: 0.7 }, { transform: 'none', opacity: 1 }]
-    el.animate(kf, { duration: 620, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-    setTimeout(() => sfx(f.intro === 'drop' ? 'slap' : 'rustle'), f.intro === 'drop' ? 420 : 200)
-  }
-
   const jump = (fl: Flag) => {
     haptic('tap')
     ed.setStep('collage')
@@ -246,14 +237,8 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
         <PillGroup className="solo"><IconBtn name="right" label="Next: Publish" onClick={goNext} /></PillGroup>
       </div>
 
-      {doc.keyframes.length > 1 && (
-        <button className="fin-play" onClick={() => { haptic('tick'); setPlaying(p => !p) }} aria-label={playing ? 'Pause unfold loop' : 'Play unfold loop'}>
-          <Icon name={playing ? 'pause' : 'play'} size={14} />
-          <span>{playing ? 'looping unfold' : 'paused'}</span>
-        </button>
-      )}
-
-      <section className="fin-panel" aria-label="Finishing">
+      <section className="fin-panel" aria-label="Finishing" data-panel style={panel.style}>
+        <Grabber {...panel.bind} label="Drag to resize the finishing panel" />
         <div className="fin-tabs" role="tablist">
           {TABS.map(t => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => { haptic('tick'); setTab(t.id) }}>
@@ -343,11 +328,6 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
               <Row label="Sticker wiggle" sub="Stickers lift and wobble slightly">
                 <Toggle on={f.wiggle} onChange={v => setFin({ wiggle: v }, 'Sticker wiggle')} label="Sticker wiggle" />
               </Row>
-              <Row label="Intro" sub="How the zine enters the screen">
-                <Segmented value={f.intro} onChange={v => { setFin({ intro: v }, 'Intro'); setTimeout(previewIntro, 30) }}
-                  options={[{ value: 'drop', label: 'Drop' }, { value: 'slide', label: 'Slide' }, { value: 'flip', label: 'Flip' }]} />
-              </Row>
-              <button className="chip fin-preview" onClick={previewIntro}><Icon name="play" size={12} /> Preview intro</button>
             </>
           )}
 
@@ -360,7 +340,7 @@ export default function Finalize({ scene, doc, exit, next }: StepProps) {
               </div>
             ) : (
               <>
-                <p className="fin-tip">{warned ? 'Worth a look before you publish. Or keep going, it\'s your zine.' : 'Tap one to jump straight to it.'}</p>
+                {warned && <p className="fin-tip">Worth a look before you publish. Or keep going, it's your zine.</p>}
                 <ul className="flag-list">
                   {flags.map(fl => (
                     <li key={fl.id}>
